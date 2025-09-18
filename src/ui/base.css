@@ -1,11 +1,196 @@
-*{box-sizing:border-box} body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,'Noto Sans',sans-serif;margin:0;padding:0;background:#0b0f14;color:#e6edf3}
-a{color:#7cc1ff;text-decoration:none} a:hover{text-decoration:underline}
-.container{max-width:1000px;margin:0 auto;padding:24px}
-.card{background:#11161d;border:1px solid #1f2a36;border-radius:16px;padding:20px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
-input,select,button,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #243140;background:#0e1319;color:#e6edf3;margin:6px 0}
-button{cursor:pointer} .row{display:flex;gap:12px} .row>div{flex:1}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2b3947;color:#9fbad3;font-size:12px}
-.table{width:100%;border-collapse:collapse;margin-top:12px}
-.table th,.table td{border-bottom:1px solid #1f2a36;padding:8px;text-align:left}
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.small{opacity:.7;font-size:12px}
+/* ======== Тема: светлая, жизнерадостная (голубой/зеленый/белый) ======== */
+:root{
+  --bg: #f7fbff;
+  --bg-accent: linear-gradient(180deg,#eef8ff 0%, #f8fffb 100%);
+  --text: #0f1b2d;
+  --muted: #5b6b7b;
+
+  --brand: #2bb673;          /* мятный зелёный */
+  --brand-2: #37a6f2;        /* небесно-голубой */
+  --brand-3: #19c1ad;        /* бирюзовый */
+  --brand-hover: #22a866;
+
+  --card-bg: #ffffff;
+  --card-brd: #e6eef6;
+  --shadow: 0 10px 30px rgba(26,86,219,0.08);
+
+  --radius: 16px;
+  --radius-lg: 22px;
+
+  --input-bg: #ffffff;
+  --input-brd: #d8e4f0;
+
+  --table-brd: #e8f0f7;
+  --table-row-alt: #f9fcff;
+
+  --chip-bg: #e8fff6;
+  --chip-brd: #bdf3df;
+  --chip-text: #0f5132;
+
+  --danger: #e5484d;
+  --danger-bg: #fff2f2;
+  --danger-brd: #ffd7d7;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  color:var(--text);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  background: var(--bg-accent);
+}
+
+/* ======== Контейнер и шапка ======== */
+.container{
+  max-width:1100px;
+  margin:0 auto;
+  padding:24px;
+}
+
+.header{
+  display:flex;
+  gap:16px;
+  align-items:center;
+  justify-content:space-between;
+  margin:0 0 16px 0;
+}
+
+.header h2{
+  margin:0;
+  font-size:28px;
+  letter-spacing:.2px;
+}
+
+/* неброская цветная «полоска настроения» под шапкой */
+.container::before{
+  content:"";
+  display:block;
+  height:8px;
+  width:100%;
+  border-radius:999px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 60%, var(--brand-3) 100%);
+  margin:0 0 16px 0;
+  opacity:.25;
+}
+
+/* ======== Карточки ======== */
+.card{
+  background:var(--card-bg);
+  border:1px solid var(--card-brd);
+  border-radius:var(--radius-lg);
+  padding:20px;
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+}
+
+/* ======== Тексты и ссылки ======== */
+a{color:var(--brand-2);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.small{opacity:.8;color:var(--muted);font-size:12px}
+
+/* ======== Формы ======== */
+label{display:block;margin:0 0 6px 4px;font-size:13px;color:var(--muted)}
+input,select,button,textarea{
+  width:100%;
+  padding:12px 14px;
+  border-radius:14px;
+  border:1px solid var(--input-brd);
+  background:var(--input-bg);
+  color:var(--text);
+  margin:6px 0 12px 0;
+  outline:none;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .02s ease;
+}
+input:focus,select:focus,textarea:focus{
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px rgba(55,166,242,0.15);
+}
+
+/* Кнопки */
+button{
+  cursor:pointer;
+  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-3) 100%);
+  color:#fff;
+  border:none;
+  font-weight:600;
+  letter-spacing:.2px;
+  box-shadow: 0 6px 18px rgba(41,171,135,0.25);
+}
+button:hover{filter:brightness(1.02)}
+button:active{transform:translateY(1px)}
+button.secondary{
+  background:#fff;color:var(--brand);
+  border:1px solid var(--input-brd);
+  box-shadow:none;
+}
+button.danger{
+  background: var(--danger);
+  box-shadow: 0 6px 18px rgba(229,72,77,.2);
+}
+
+/* Компактные кнопки (в таблицах) */
+.btn-sm{padding:8px 12px;font-size:13px;border-radius:12px}
+
+/* ======== Сетки и адаптив ======== */
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1 1 240px}
+
+/* ======== Бейджи/чипы ======== */
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;
+  border:1px solid var(--chip-brd);
+  background:var(--chip-bg); color:var(--chip-text);
+  font-size:12px; font-weight:600;
+}
+
+/* Ошибки/предупреждения */
+.alert{
+  padding:10px 12px;border-radius:12px;margin-top:8px;
+  background:var(--danger-bg); border:1px solid var(--danger-brd); color:#7a1d20;
+  font-size:13px;
+}
+
+/* ======== Таблицы ======== */
+.table{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;border:1px solid var(--table-brd);border-radius:14px;overflow:hidden}
+.table thead th{
+  background:linear-gradient(180deg,#f4fbff 0%,#f8fffb 100%);
+  color:#3a4b5a;
+  font-weight:600;
+  font-size:13px;
+  text-align:left;
+  padding:10px 12px;
+  border-bottom:1px solid var(--table-brd);
+}
+.table td{
+  padding:10px 12px;
+  border-bottom:1px solid var(--table-brd);
+}
+.table tr:nth-child(even) td{background:var(--table-row-alt)}
+.table tr:hover td{background:#f2fbff}
+
+/* Кнопки в таблицах в одну линию */
+.table .row{gap:8px}
+.table button{width:auto}
+
+/* ======== Мобильная адаптация ======== */
+@media (max-width: 720px){
+  .container{padding:16px}
+  .header h2{font-size:22px}
+  .card{padding:16px}
+  .row>div{flex:1 1 100%}
+  button{width:100%}
+  .table thead{display:none}
+  .table tr{display:block;border-bottom:1px solid var(--table-brd);margin-bottom:8px}
+  .table td{display:flex;justify-content:space-between;gap:12px}
+  .table td::before{
+    content: attr(data-label);
+    color:var(--muted);
+    font-size:12px;
+  }
+}
+
+/* ======== Подсказки/тосты (на будущее) ======== */
+.toast{position:fixed;right:16px;bottom:16px;background:#ffffff;border:1px solid var(--card-brd);color:var(--text);border-radius:14px;padding:12px 16px;box-shadow:var(--shadow)}
