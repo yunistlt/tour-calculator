@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import jwtDecode from 'jwt-decode'
+import { jwtDecode } from 'jwt-decode'
 
 export const useAuth = create((set,get)=>({
   token: localStorage.getItem('token') || null,
