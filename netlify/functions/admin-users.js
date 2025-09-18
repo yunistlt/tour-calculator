@@ -35,35 +35,18 @@ export async function handler(event){
   if(method === 'GET'){
     const idOrUsername = url.searchParams.get('id') // может быть UUID или username
 
-    // Список пользователей + счётчик сценариев
+    // (A) Список пользователей — БЕЗ подсчёта сценариев (убираем потенциальный источник ошибки)
     if(!idOrUsername){
-      const { data: users, error: e1 } = await supabase
+      const { data: users, error } = await supabase
         .from('users')
         .select('id, username, created_at')
         .order('created_at', { ascending: false })
-      if(e1) return json(400, { error: e1.message })
-
-      const { data: scenRows, error: e2 } = await supabase
-        .from('scenarios')
-        .select('user_id')
-      if(e2) return json(400, { error: e2.message })
-
-      const map = new Map()
-      ;(scenRows || []).forEach(r=>{
-        if(!r.user_id) return
-        map.set(r.user_id, (map.get(r.user_id) || 0) + 1)
-      })
-
-      const result = users.map(u => ({
-        id: u.id,
-        username: u.username,
-        created_at: u.created_at,
-        scenarios_count: map.get(u.id) || 0
-      }))
-      return json(200, result)
+      if(error) return json(400, { error: error.message })
+      // возвращаем без scenarios_count (фронт покажет «—»)
+      return json(200, users)
     }
 
-    // Детали конкретного пользователя (по UUID или по username)
+    // (B) Детали конкретного пользователя (по UUID или по username) + его сценарии
     let user
     if(isUuid(idOrUsername)){
       const { data, error } = await supabase
