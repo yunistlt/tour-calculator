@@ -86,7 +86,7 @@ export default function AdminUsers(){
               <tr key={u.id}>
                 <td data-label="Логин">{u.username}</td>
                 <td data-label="Создан">{new Date(u.created_at).toLocaleString()}</td>
-                <td data-label="Сценариев">{u.scenarios_count}</td>
+                <td data-label="Сценариев">{u.scenarios_count ?? '—'}</td>
                 <td data-label="">
                   <div className="row" style={{gap:8}}>
                     <button className="btn-sm" onClick={()=>openUser(u.id)}>Просмотр сценариев</button>
