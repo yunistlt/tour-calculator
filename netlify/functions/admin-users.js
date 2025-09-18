@@ -1,7 +1,7 @@
 // netlify/functions/admin-users.js
 import { createClient } from '@supabase/supabase-js'
 import jwt from 'jsonwebtoken'
-import bcrypt from 'bcryptjs' // для сброса пароля (PUT)
+import bcrypt from 'bcryptjs'
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
@@ -20,32 +20,36 @@ function isAdmin(event){
   }catch{ return null }
 }
 
+function isUuid(s){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s || '')
+}
+
 export async function handler(event){
   const admin = isAdmin(event)
   if(!admin) return json(401, { error: 'Unauthorized' })
 
-  // ── GET /api/admin/users        → список пользователей + счётчик сценариев
-  // ── GET /api/admin/users?id=..  → один пользователь + его сценарии
-  if(event.httpMethod === 'GET'){
-    const url = new URL(event.rawUrl)
-    const id = url.searchParams.get('id')
+  const url = new URL(event.rawUrl)
+  const method = event.httpMethod
 
-    if(!id){
-      // 1) берём пользователей
+  // ───────────────── GET
+  if(method === 'GET'){
+    const idOrUsername = url.searchParams.get('id') // может быть UUID или username
+
+    // Список пользователей + счётчик сценариев
+    if(!idOrUsername){
       const { data: users, error: e1 } = await supabase
         .from('users')
         .select('id, username, created_at')
         .order('created_at', { ascending: false })
       if(e1) return json(400, { error: e1.message })
 
-      // 2) берём все user_id из scenarios и считаем в JS
       const { data: scenRows, error: e2 } = await supabase
         .from('scenarios')
         .select('user_id')
       if(e2) return json(400, { error: e2.message })
 
       const map = new Map()
-      ;(scenRows || []).forEach(r => {
+      ;(scenRows || []).forEach(r=>{
         if(!r.user_id) return
         map.set(r.user_id, (map.get(r.user_id) || 0) + 1)
       })
@@ -54,44 +58,67 @@ export async function handler(event){
         id: u.id,
         username: u.username,
         created_at: u.created_at,
-        scenarios_count: map.get(u.id) || 0,
+        scenarios_count: map.get(u.id) || 0
       }))
       return json(200, result)
-    } else {
-      const { data: user, error: e1 } = await supabase
+    }
+
+    // Детали конкретного пользователя (по UUID или по username)
+    let user
+    if(isUuid(idOrUsername)){
+      const { data, error } = await supabase
         .from('users')
         .select('id, username, created_at')
-        .eq('id', id)
+        .eq('id', idOrUsername)
         .single()
-      if(e1) return json(404, { error: 'User not found' })
-
-      const { data: scenarios, error: e2 } = await supabase
-        .from('scenarios')
-        .select('id, name, days, participants, singles, updated_at, created_at')
-        .eq('user_id', id)
-        .order('updated_at', { ascending: false })
-      if(e2) return json(400, { error: e2.message })
-
-      return json(200, { user, scenarios })
+      if(error) return json(404, { error: 'User not found' })
+      user = data
+    } else {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, created_at')
+        .eq('username', idOrUsername)
+        .single()
+      if(error) return json(404, { error: 'User not found' })
+      user = data
     }
+
+    const { data: scenarios, error: e2 } = await supabase
+      .from('scenarios')
+      .select('id, name, days, participants, singles, updated_at, created_at')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+    if(e2) return json(400, { error: e2.message })
+
+    return json(200, { user, scenarios })
   }
 
-  // ── PUT /api/admin/users?id=<user_uuid>
-  // body: { new_password: "..." }  → сбросить пароль
-  if(event.httpMethod === 'PUT'){
-    const url = new URL(event.rawUrl)
-    const id = url.searchParams.get('id')
-    if(!id) return json(400, { error: 'id required' })
-
+  // ──────────────── PUT: сброс пароля пользователя
+  // /api/admin/users?id=<uuid или username>
+  if(method === 'PUT'){
+    const idOrUsername = url.searchParams.get('id')
+    if(!idOrUsername) return json(400, { error: 'id required (uuid or username)' })
     const body = JSON.parse(event.body || '{}')
     const np = (body.new_password || '').trim()
     if(np.length < 3) return json(400, { error: 'New password too short' })
+
+    // находим пользователя по uuid или username
+    let userSel
+    if(isUuid(idOrUsername)){
+      const { data, error } = await supabase.from('users').select('id').eq('id', idOrUsername).single()
+      if(error) return json(404, { error: 'User not found' })
+      userSel = data
+    } else {
+      const { data, error } = await supabase.from('users').select('id').eq('username', idOrUsername).single()
+      if(error) return json(404, { error: 'User not found' })
+      userSel = data
+    }
 
     const hash = await bcrypt.hash(np, 10)
     const { error } = await supabase
       .from('users')
       .update({ password_hash: hash })
-      .eq('id', id)
+      .eq('id', userSel.id)
     if(error) return json(400, { error: error.message })
 
     return json(200, { ok: true })
