@@ -7,7 +7,7 @@ export default function AdminPanel(){
   const nav = useNavigate()
   const [services,setServices] = useState([])
   const [form,setForm] = useState({name_ru:'', type:'PER_PERSON', price:0})
-  const [editing, setEditing] = useState(null) // {id, name_ru, type, price} | null
+  const [editing, setEditing] = useState(null) // выбранная услуга для редактирования
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -88,7 +88,7 @@ export default function AdminPanel(){
         </div>
       </div>
 
-      {/* Добавление услуги */}
+      {/* Добавление новой услуги */}
       <div className="card">
         <h3>Добавить услугу</h3>
         <form onSubmit={addService}>
@@ -126,7 +126,7 @@ export default function AdminPanel(){
         </form>
       </div>
 
-      {/* Таблица услуг */}
+      {/* Список услуг */}
       <div className="card">
         <h3>Справочник услуг</h3>
         {loading && <div className="badge">Загрузка…</div>}
@@ -147,15 +147,13 @@ export default function AdminPanel(){
                 <td>{s.type==='PER_PERSON'?'на человека':'на группу'}</td>
                 <td>{Number(s.price).toFixed(2)}</td>
                 <td>
-                  <div className="row" style={{gap:8}}>
-                    <button onClick={()=>setEditing({
-                      id: s.id,
-                      name_ru: s.name_ru,
-                      type: s.type,
-                      price: Number(s.price)
-                    })}>✏️ Редактировать</button>
-                    <button onClick={()=>delService(s.id)}>🗑 Удалить</button>
-                  </div>
+                  <button onClick={()=>setEditing({
+                    id: s.id,
+                    name_ru: s.name_ru,
+                    type: s.type,
+                    price: Number(s.price)
+                  })}>✏️ Редактировать</button>
+                  <button onClick={()=>delService(s.id)}>🗑 Удалить</button>
                 </td>
               </tr>
             ))}
@@ -201,9 +199,9 @@ export default function AdminPanel(){
                 />
               </div>
             </div>
-            <div className="row">
-              <div><button type="submit">Сохранить</button></div>
-              <div><button type="button" onClick={()=>setEditing(null)}>Отмена</button></div>
+            <div className="row" style={{gap:8}}>
+              <button type="submit">Сохранить</button>
+              <button type="button" onClick={()=>setEditing(null)}>Отмена</button>
             </div>
           </form>
         </div>
