@@ -1,32 +1,61 @@
 import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from './store'
 
 export default function AdminLogin(){
   const nav = useNavigate()
-  const { setToken } = useAuth()
-  const [username,setUsername] = useState('')
-  const [password,setPassword] = useState('')
+  const { setAdminToken, logoutAll } = useAuth()
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  async function submit(e){
+  async function onSubmit(e){
     e.preventDefault()
-    const res = await fetch('/api/admin-login',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username,password})})
-    const data = await res.json()
-    if(!res.ok){ alert(data.error || 'Ошибка'); return }
-    setToken(data.token,true)
-    nav('/admin')
+    setError('')
+    setLoading(true)
+    try{
+      const r = await fetch('/api/admin-login', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ login, password })
+      })
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok || !data?.token){
+        throw new Error(data?.error || 'Неверный логин или пароль')
+      }
+      // чистим всё и сохраняем adminToken
+      logoutAll()
+      setAdminToken(data.token)
+      nav('/admin')
+    }catch(err){
+      setError(err.message)
+    }finally{
+      setLoading(false)
+    }
   }
 
   return (
     <div className="container">
-      <div className="header"><h2>Вход администратора</h2><Link to="/login">← Вход пользователя</Link></div>
-      <div className="card">
-        <form onSubmit={submit}>
-          <div className="row">
-            <div><label>Логин</label><input value={username} onChange={e=>setUsername(e.target.value)} required /></div>
-            <div><label>Пароль</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
+      <div className="header">
+        <h2>Вход в админку</h2>
+        <Link to="/login" className="small">← Пользователь</Link>
+      </div>
+
+      <div className="card" style={{maxWidth: 520}}>
+        <form onSubmit={onSubmit}>
+          <div>
+            <label>Логин</label>
+            <input value={login} onChange={e=>setLogin(e.target.value)} autoFocus />
           </div>
-          <button type="submit">Войти как админ</button>
+          <div>
+            <label>Пароль</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} />
+          </div>
+          {error && <div className="alert">{error}</div>}
+          <button type="submit" disabled={loading}>
+            {loading ? 'Входим…' : 'Войти'}
+          </button>
         </form>
       </div>
     </div>
