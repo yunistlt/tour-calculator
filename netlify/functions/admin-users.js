@@ -20,6 +20,7 @@ function isAdmin(event){
   }catch{ return null }
 }
 
+// простая проверка uuid — если не uuid, считаем, что это username
 function isUuid(s){
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s || '')
 }
@@ -31,34 +32,33 @@ export async function handler(event){
   const url = new URL(event.rawUrl)
   const method = event.httpMethod
 
-  // ───────────────── GET
+  // ───────── GET
   if(method === 'GET'){
-    const idOrUsername = url.searchParams.get('id') // может быть UUID или username
+    const idOrUsername = url.searchParams.get('id')
 
-    // (A) Список пользователей — БЕЗ подсчёта сценариев (убираем потенциальный источник ошибки)
+    // (A) Список пользователей из VIEW (id — text)
     if(!idOrUsername){
-      const { data: users, error } = await supabase
-        .from('users')
+      const { data, error } = await supabase
+        .from('admin_users_view') // ← ВАЖНО: view с id::text
         .select('id, username, created_at')
         .order('created_at', { ascending: false })
-      if(error) return json(400, { error: error.message })
-      // возвращаем без scenarios_count (фронт покажет «—»)
-      return json(200, users)
+      if(error) return json(400, { error: error.message, where: 'list' })
+      return json(200, data)
     }
 
-    // (B) Детали конкретного пользователя (по UUID или по username) + его сценарии
+    // (B) Детали конкретного пользователя (ищем либо по uuid, либо по username)
     let user
     if(isUuid(idOrUsername)){
       const { data, error } = await supabase
-        .from('users')
+        .from('admin_users_view') // id — text, но сравниваем как текст
         .select('id, username, created_at')
-        .eq('id', idOrUsername)
+        .eq('id', idOrUsername)   // сравнение по тексту
         .single()
       if(error) return json(404, { error: 'User not found' })
       user = data
     } else {
       const { data, error } = await supabase
-        .from('users')
+        .from('admin_users_view')
         .select('id, username, created_at')
         .eq('username', idOrUsername)
         .single()
@@ -66,26 +66,27 @@ export async function handler(event){
       user = data
     }
 
+    // Сценарии пользователя — тоже из VIEW с text user_id
     const { data: scenarios, error: e2 } = await supabase
-      .from('scenarios')
+      .from('admin_scenarios_view')
       .select('id, name, days, participants, singles, updated_at, created_at')
-      .eq('user_id', user.id)
+      .eq('user_id', user.id) // user.id — text, user_id — text: проблем не будет
       .order('updated_at', { ascending: false })
-    if(e2) return json(400, { error: e2.message })
+    if(e2) return json(400, { error: e2.message, where: 'scenarios' })
 
     return json(200, { user, scenarios })
   }
 
-  // ──────────────── PUT: сброс пароля пользователя
-  // /api/admin/users?id=<uuid или username>
+  // ───────── PUT: сброс пароля (id — uuid или username)
   if(method === 'PUT'){
     const idOrUsername = url.searchParams.get('id')
     if(!idOrUsername) return json(400, { error: 'id required (uuid or username)' })
+
     const body = JSON.parse(event.body || '{}')
     const np = (body.new_password || '').trim()
     if(np.length < 3) return json(400, { error: 'New password too short' })
 
-    // находим пользователя по uuid или username
+    // найдём пользователя в основной таблице (чтобы получить реальный uuid)
     let userSel
     if(isUuid(idOrUsername)){
       const { data, error } = await supabase.from('users').select('id').eq('id', idOrUsername).single()
@@ -102,7 +103,7 @@ export async function handler(event){
       .from('users')
       .update({ password_hash: hash })
       .eq('id', userSel.id)
-    if(error) return json(400, { error: error.message })
+    if(error) return json(400, { error: error.message, where: 'reset' })
 
     return json(200, { ok: true })
   }
