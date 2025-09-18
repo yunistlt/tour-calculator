@@ -4,17 +4,29 @@ import { useAuth } from './store'
 
 export default function App(){
   const nav = useNavigate()
-  const { token, user } = useAuth()
+  const { userToken, isAdmin } = useAuth()   // <-- важно: именно userToken
 
   const [scenario,setScenario] = useState({ id:null, name:'Мой тур', days:1, participants:2, singles:0, description:'' })
   const [services,setServices] = useState([])
-  const [tourItems,setTourItems] = useState([])     // PER_TOUR
-  const [dayItems,setDayItems] = useState({})       // {day: [ {id, service_id, type, price, repeats} ]}
-  const [files,setFiles] = useState([])             // {name,url}
+  const [tourItems,setTourItems] = useState([])
+  const [dayItems,setDayItems] = useState({})
+  const [files,setFiles] = useState([])
   const [modalOpen,setModalOpen] = useState(false)
-  const [list,setList] = useState([])               // список сценариев
+  const [list,setList] = useState([])
 
-  // Размещение
+  // запрет для админа + требуем user-вход
+  useEffect(()=>{
+    if (!userToken) { nav('/login') }
+    if (isAdmin) {
+      alert('Калькулятор доступен только под пользовательским аккаунтом. Войдите как пользователь.')
+      nav('/login')
+    }
+  }, [userToken, isAdmin])
+
+  // загрузка справочника услуг
+  useEffect(()=>{ fetch('/api/services').then(r=>r.json()).then(setServices) },[])
+
+  // ---- размещение / лимиты ----
   const DOUBLE_ROOMS = 10
   const N = Number(scenario.participants || 0)
   const S = Number(scenario.singles || 0)
@@ -22,10 +34,6 @@ export default function App(){
   const maxAllowed = DOUBLE_ROOMS * 2 - S_EFF
   const days = Array.from({length: Math.max(1, Number(scenario.days||1))}, (_,i)=>i+1)
 
-  useEffect(()=>{ if(!token){ nav('/login') } },[token])
-  useEffect(()=>{ fetch('/api/services').then(r=>r.json()).then(setServices) },[])
-
-  // ======== Ограничители ввода ========
   function handleParticipantsChange(e){
     const raw = Number(e.target.value || 0)
     if (raw > maxAllowed){
@@ -51,7 +59,7 @@ export default function App(){
     setScenario(prev => ({...prev, days: Math.max(1, raw)}))
   }
 
-  // ======== Выбор услуг ========
+  // ---- выбор услуг ----
   const tourServices = services.filter(s=>s.type==='PER_TOUR')
   const dailyServices = services.filter(s=>s.type==='PER_PERSON' || s.type==='PER_GROUP')
 
@@ -63,7 +71,6 @@ export default function App(){
   function setTourRepeats(id, val){
     setTourItems(tourItems.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x ))
   }
-
   function toggleItem(day, service){
     const arr = dayItems[day] || []
     const exists = arr.find(x=>x.id===service.id)
@@ -75,31 +82,26 @@ export default function App(){
     setDayItems({...dayItems, [day]: arr.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x )})
   }
 
-  // ======== Расчёт ========
+  // ---- расчёт ----
   const perPersonTour = tourItems.reduce((sum, it)=>{
     if(N>0) return sum + (Number(it.price) * (it.repeats||1))/N
     return sum
   }, 0)
-
   let perPersonTotalDays = 0
   const breakdown = days.map(d=>{
     const items = (dayItems[d]||[]).filter(it => it.type==='PER_PERSON' || it.type==='PER_GROUP')
-    let costPerPersonDay = 0
+    let cost = 0
     items.forEach(it=>{
-      if(it.type === 'PER_PERSON'){
-        costPerPersonDay += Number(it.price)
-      } else if (it.type === 'PER_GROUP'){
-        if(N>0) costPerPersonDay += (Number(it.price) * (it.repeats||1))/N
-      }
+      if(it.type==='PER_PERSON') cost += Number(it.price)
+      else if(it.type==='PER_GROUP' && N>0) cost += (Number(it.price)*(it.repeats||1))/N
     })
-    perPersonTotalDays += costPerPersonDay
-    return { day:d, costPerPersonDay, items }
+    perPersonTotalDays += cost
+    return { day:d, costPerPersonDay: cost, items }
   })
-
   const perPersonTotal = perPersonTour + perPersonTotalDays
   const groupTotal = perPersonTotal * N
 
-  // ======== Сохранение/загрузка ========
+  // ---- сборка items для сохранения ----
   function buildItemsPayload(){
     const itemsTour = tourItems.map(it => ({
       day: null, service_id: it.service_id, type: it.type, price: Number(it.price), repeats: Number(it.repeats||1)
@@ -112,7 +114,9 @@ export default function App(){
     return [...itemsTour, ...itemsDays]
   }
 
+  // ---- сохранение/загрузка ----
   async function saveScenario(){
+    if(!userToken){ alert('Войдите как пользователь'); return }
     const payload = {
       name: scenario.name,
       days: scenario.days,
@@ -121,42 +125,36 @@ export default function App(){
       description: scenario.description,
       items: buildItemsPayload()
     }
-    const headers = { 'Content-Type':'application/json', Authorization: 'Bearer '+token }
+    const headers = { 'Content-Type':'application/json', Authorization: 'Bearer '+userToken }
 
     if (!scenario.id){
       const r = await fetch('/api/scenarios', { method:'POST', headers, body: JSON.stringify(payload) })
-      const t = await r.json()
+      const t = await r.json().catch(()=>({}))
       if(r.ok){ setScenario(prev => ({...prev, id: t.id})); alert('Сценарий сохранён') }
       else alert('Ошибка сохранения: ' + (t.error || r.status))
     } else {
       const r = await fetch('/api/scenarios?id='+scenario.id, { method:'PUT', headers, body: JSON.stringify(payload) })
-      if(r.ok){ alert('Изменения сохранены') } else {
-        const t = await r.json().catch(()=>({})); alert('Ошибка: ' + (t.error || r.status))
-      }
+      const t = await r.json().catch(()=>({}))
+      if(r.ok){ alert('Изменения сохранены') } else { alert('Ошибка: ' + (t.error || r.status)) }
     }
   }
 
   async function openDialog(){
     setModalOpen(true)
-    const r = await fetch('/api/scenarios', { headers: { Authorization:'Bearer '+token } })
+    const r = await fetch('/api/scenarios', { headers: { Authorization:'Bearer '+userToken } })
     const data = await r.json()
     if(r.ok) setList(data)
   }
 
   async function loadScenario(id){
-    const r = await fetch('/api/scenarios?id='+id, { headers:{ Authorization:'Bearer '+token } })
+    const r = await fetch('/api/scenarios?id='+id, { headers:{ Authorization:'Bearer '+userToken } })
     const data = await r.json()
     if(!r.ok){ alert('Не удалось загрузить'); return }
     const sc = data.scenario
     setScenario({
-      id: sc.id,
-      name: sc.name,
-      days: sc.days,
-      participants: sc.participants,
-      singles: sc.singles,
+      id: sc.id, name: sc.name, days: sc.days, participants: sc.participants, singles: sc.singles,
       description: sc.description || ''
     })
-    // восстановить позиции
     const tItems = (data.items||[]).filter(x=>x.type==='PER_TOUR')
       .map(x=>({ id:x.service_id, service_id:x.service_id, name_ru:'', type:x.type, price:Number(x.price), repeats:Number(x.repeats||1) }))
     setTourItems(tItems)
@@ -173,22 +171,19 @@ export default function App(){
 
   async function deleteScenario(id){
     if(!confirm('Удалить сценарий?')) return
-    const r = await fetch('/api/scenarios?id='+id, { method:'DELETE', headers:{ Authorization:'Bearer '+token } })
+    const r = await fetch('/api/scenarios?id='+id, { method:'DELETE', headers:{ Authorization:'Bearer '+userToken } })
     if(r.ok){
       if (scenario.id === id) {
-        // очистим текущий
         setScenario({ id:null, name:'Мой тур', days:1, participants:2, singles:0, description:'' })
         setTourItems([]); setDayItems({}); setFiles([])
       }
-      // обновим список
-      const rr = await fetch('/api/scenarios', { headers:{ Authorization:'Bearer '+token } })
+      const rr = await fetch('/api/scenarios', { headers:{ Authorization:'Bearer '+userToken } })
       const data = await rr.json(); if(rr.ok) setList(data)
     } else {
       const t = await r.json().catch(()=>({})); alert('Ошибка удаления: ' + (t.error || r.status))
     }
   }
 
-  // ======== Файлы ========
   async function onFileSelected(e){
     const file = e.target.files?.[0]
     if(!file){ return }
@@ -203,17 +198,13 @@ export default function App(){
       headers:{
         'Content-Type':'application/octet-stream',
         'X-Filename': encodeURIComponent(file.name),
-        Authorization:'Bearer '+token
+        Authorization:'Bearer '+userToken
       },
       body: buf
     })
     const t = await r.json()
-    if(r.ok){
-      setFiles([...files, { name: file.name, url: t.url }])
-      alert('Файл загружен')
-    }else{
-      alert('Ошибка загрузки: ' + (t.error || r.status))
-    }
+    if(r.ok){ setFiles([...files, { name: file.name, url: t.url }]); alert('Файл загружен') }
+    else{ alert('Ошибка загрузки: ' + (t.error || r.status)) }
     e.target.value = ''
   }
 
@@ -232,128 +223,90 @@ export default function App(){
       {/* Параметры тура */}
       <div className="card">
         <div className="row">
-          <div>
-            <label>Название сценария</label>
-            <input value={scenario.name} onChange={e=>setScenario({...scenario, name:e.target.value})}/>
-          </div>
+          <div><label>Название сценария</label><input value={scenario.name} onChange={e=>setScenario({...scenario, name:e.target.value})}/></div>
         </div>
         <div className="row">
-          <div>
-            <label>Дней</label>
-            <input type="number" min="1" value={scenario.days} onChange={handleDaysChange}/>
-          </div>
-          <div>
-            <label>Участников (макс {maxAllowed})</label>
-            <input type="number" min="1" max={maxAllowed} value={scenario.participants} onChange={handleParticipantsChange}/>
-          </div>
-          <div>
-            <label>Singles (0–10)</label>
-            <input type="number" min="0" max="10" value={scenario.singles} onChange={handleSinglesChange}/>
-          </div>
+          <div><label>Дней</label><input type="number" min="1" value={scenario.days} onChange={handleDaysChange}/></div>
+          <div><label>Участников (макс {maxAllowed})</label><input type="number" min="1" max={maxAllowed} value={scenario.participants} onChange={handleParticipantsChange}/></div>
+          <div><label>Singles (0–10)</label><input type="number" min="0" max="10" value={scenario.singles} onChange={handleSinglesChange}/></div>
         </div>
-
         <div className="row">
-          <div>
-            <label>Описание</label>
-            <textarea rows="4" placeholder="Свободный текст: заметки, список участников, детали..." value={scenario.description} onChange={e=>setScenario({...scenario, description:e.target.value})}/>
-          </div>
+          <div><label>Описание</label><textarea rows="4" placeholder="Свободный текст: заметки, список участников, детали..." value={scenario.description} onChange={e=>setScenario({...scenario, description:e.target.value})}/></div>
         </div>
-
         <div className="row" style={{alignItems:'flex-end'}}>
-          <div style={{flex:'0 1 320px'}}>
-            <label>Прикрепить файл</label>
-            <input type="file" onChange={onFileSelected}/>
-          </div>
+          <div style={{flex:'0 1 320px'}}><label>Прикрепить файл</label><input type="file" onChange={onFileSelected}/></div>
           <div>
             <label>Файлы</label>
             <div className="small">{files.length ? 'Список прикреплённых файлов:' : 'Файлов нет'}</div>
-            {files.length>0 && (
-              <ul>
-                {files.map((f,i)=>(<li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.name || f.file_name || 'Файл '+(i+1)}</a></li>))}
-              </ul>
-            )}
+            {files.length>0 && (<ul>{files.map((f,i)=>(<li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.name || f.file_name || 'Файл '+(i+1)}</a></li>))}</ul>)}
           </div>
         </div>
       </div>
 
-      {/* Блок услуг на весь тур */}
+      {/* Услуги за тур */}
       <div className="card">
         <h3>Услуги на весь тур (делятся на всех)</h3>
         <div className="row">
-          {tourServices.map(svc=>(
+          {services.filter(s=>s.type==='PER_TOUR').map(svc=>(
             <button key={svc.id} onClick={()=>toggleTourItem(svc)}>
               {svc.name_ru} — на группу (за тур) — {svc.price}
             </button>
           ))}
         </div>
-        <div>
-          <table className="table">
-            <thead><tr><th>Услуга</th><th>Повторы</th><th>На человека (за тур)</th></tr></thead>
-            <tbody>
-              {tourItems.map(it=>{
-                const perPerson = N>0 ? (Number(it.price) * (it.repeats||1))/N : 0
-                return (
-                  <tr key={it.id}>
-                    <td data-label="Услуга">{it.name_ru || it.service_id}</td>
-                    <td data-label="Повторы"><input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} /></td>
-                    <td data-label="На чел (тур)">{perPerson.toFixed(2)}</td>
-                  </tr>
-                )
-              })}
-              {tourItems.length===0 && <tr><td colSpan={3} className="small">Пока ничего не выбрано</td></tr>}
-            </tbody>
-          </table>
-          <div className="row"><div className="badge">Сумма «за тур» на человека: {perPersonTour.toFixed(2)}</div></div>
-        </div>
+        <table className="table">
+          <thead><tr><th>Услуга</th><th>Повторы</th><th>На чел (тур)</th></tr></thead>
+          <tbody>
+            {tourItems.map(it=>{
+              const perPerson = N>0 ? (Number(it.price)*(it.repeats||1))/N : 0
+              return (
+                <tr key={it.id}>
+                  <td data-label="Услуга">{it.name_ru || it.service_id}</td>
+                  <td data-label="Повторы"><input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} /></td>
+                  <td data-label="На чел (тур)">{perPerson.toFixed(2)}</td>
+                </tr>
+              )
+            })}
+            {tourItems.length===0 && <tr><td colSpan={3} className="small">Пока ничего не выбрано</td></tr>}
+          </tbody>
+        </table>
+        <div className="row"><div className="badge">Сумма «за тур» на человека: {perPersonTour.toFixed(2)}</div></div>
       </div>
 
-      {/* Блок услуг по дням */}
+      {/* Услуги по дням */}
       <div className="card">
         <h3>Выбор услуг по дням</h3>
         {days.map(d=>(
           <div key={d} style={{borderTop:'1px solid #e6eef6', paddingTop:12, marginTop:12}}>
+            <div className="row"><div><strong>День {d}</strong></div><div className="small">Выберите услуги на человека или на группу (за день).</div></div>
             <div className="row">
-              <div><strong>День {d}</strong></div>
-              <div className="small">Выберите услуги на человека или на группу (за день).</div>
-            </div>
-            <div className="row">
-              {dailyServices.map(svc=>(
+              {services.filter(s=>s.type!=='PER_TOUR').map(svc=>(
                 <button key={svc.id} onClick={()=>toggleItem(d,svc)}>
                   {svc.name_ru} — {svc.type==='PER_PERSON'? 'на человека' : 'на группу/день'} — {svc.price}
                 </button>
               ))}
             </div>
-            <div>
-              <table className="table">
-                <thead><tr><th>Услуга</th><th>Тип</th><th>Повторы</th><th>На чел/день</th></tr></thead>
-                <tbody>
-                  {(dayItems[d]||[]).map(it=>{
-                    const perPerson =
-                      it.type==='PER_PERSON'
-                        ? Number(it.price)
-                        : (N>0 ? (Number(it.price)*(it.repeats||1))/N : 0)
-                    return (
-                      <tr key={it.id}>
-                        <td data-label="Услуга">{it.name_ru || it.service_id}</td>
-                        <td data-label="Тип">{it.type==='PER_PERSON'?'на человека':'на группу/день'}</td>
-                        <td data-label="Повторы">
-                          {it.type==='PER_GROUP'
-                            ? <input type="number" min="1" value={it.repeats||1} onChange={e=>setRepeats(d,it.id,e.target.value)}/>
-                            : <span>-</span>}
-                        </td>
-                        <td data-label="На чел/день">{perPerson.toFixed(2)}</td>
-                      </tr>
-                    )
-                  })}
-                  {(dayItems[d]||[]).length===0 && (
-                    <tr><td colSpan={4} className="small">Нет услуг для этого дня</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="row"><div className="badge">
-              Итого на человека за день: {breakdown.find(x=>x.day===d)?.costPerPersonDay.toFixed(2)}
-            </div></div>
+            <table className="table">
+              <thead><tr><th>Услуга</th><th>Тип</th><th>Повторы</th><th>На чел/день</th></tr></thead>
+              <tbody>
+                {(dayItems[d]||[]).map(it=>{
+                  const perPerson = it.type==='PER_PERSON' ? Number(it.price) : (N>0 ? (Number(it.price)*(it.repeats||1))/N : 0)
+                  return (
+                    <tr key={it.id}>
+                      <td data-label="Услуга">{it.name_ru || it.service_id}</td>
+                      <td data-label="Тип">{it.type==='PER_PERSON'?'на человека':'на группу/день'}</td>
+                      <td data-label="Повторы">
+                        {it.type==='PER_GROUP'
+                          ? <input type="number" min="1" value={it.repeats||1} onChange={e=>setRepeats(d,it.id,e.target.value)}/>
+                          : <span>-</span>}
+                      </td>
+                      <td data-label="На чел/день">{perPerson.toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
+                {(dayItems[d]||[]).length===0 && (<tr><td colSpan={4} className="small">Нет услуг для этого дня</td></tr>)}
+              </tbody>
+            </table>
+            <div className="row"><div className="badge">Итого на человека за день: {breakdown.find(x=>x.day===d)?.costPerPersonDay.toFixed(2)}</div></div>
           </div>
         ))}
       </div>
@@ -361,14 +314,11 @@ export default function App(){
       {/* Итоги */}
       <div className="card">
         <h3>Итоги</h3>
-        <div className="row">
-          <div className="badge">На человека (итого): {perPersonTotal.toFixed(2)}</div>
-          <div className="badge">На группу (итого): {groupTotal.toFixed(2)}</div>
-        </div>
-        <div className="small">Включает: услуги «за тур» ({perPersonTour.toFixed(2)} на чел) + суммы по дням.</div>
+        <div className="row"><div className="badge">На человека (итого): {perPersonTotal.toFixed(2)}</div><div className="badge">На группу (итого): {groupTotal.toFixed(2)}</div></div>
+        <div className="small">Включает: «за тур» ({perPersonTour.toFixed(2)} на чел) + суммы по дням.</div>
       </div>
 
-      {/* Модалка «Открыть сценарий» */}
+      {/* Модалка «Открыть» */}
       {modalOpen && (
         <div className="fixed" style={{position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
           <div className="card" style={{maxWidth:700, width:'100%'}}>
