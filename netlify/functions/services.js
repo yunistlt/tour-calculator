@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 )
 
-// Утилита для JSON-ответов
 function json(statusCode, body) {
   return {
     statusCode,
@@ -16,7 +15,6 @@ function json(statusCode, body) {
   }
 }
 
-// Авторизация админа
 function requireAuth(event, adminOnly = false) {
   try {
     const token = event.headers.authorization?.split(' ')[1]
@@ -29,33 +27,41 @@ function requireAuth(event, adminOnly = false) {
   }
 }
 
+function sanitizeType(t) {
+  if (t === 'PER_PERSON' || t === 'PER_GROUP' || t === 'PER_TOUR') return t
+  return null
+}
+
 export async function handler(event) {
-  // --- GET: список услуг
+  // GET: список услуг
   if (event.httpMethod === 'GET') {
-    const { data, error } = await supabase.from('services').select('*').order('created_at')
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .order('created_at', { ascending: true })
     if (error) return json(500, { error: error.message })
     return json(200, data)
   }
 
-  // --- POST: добавить услугу
+  // POST: создать услугу
   if (event.httpMethod === 'POST') {
     const user = requireAuth(event, true)
     if (!user) return json(401, { error: 'Unauthorized' })
-
     const body = JSON.parse(event.body || '{}')
-    if (!body.name_ru || !body.type) return json(400, { error: 'name_ru and type required' })
+    const type = sanitizeType(body.type)
+    if (!body.name_ru || !type) return json(400, { error: 'name_ru and valid type required' })
+    const price = Number(body.price || 0)
 
     const { data, error } = await supabase
       .from('services')
-      .insert([{ name_ru: body.name_ru, type: body.type, price: Number(body.price || 0) }])
+      .insert([{ name_ru: body.name_ru, type, price }])
       .select()
       .single()
-
     if (error) return json(400, { error: error.message })
     return json(201, data)
   }
 
-  // --- PUT: обновить услугу
+  // PUT: обновить услугу
   if (event.httpMethod === 'PUT') {
     const user = requireAuth(event, true)
     if (!user) return json(401, { error: 'Unauthorized' })
@@ -66,7 +72,11 @@ export async function handler(event) {
     const body = JSON.parse(event.body || '{}')
     const patch = {}
     if (typeof body.name_ru === 'string') patch.name_ru = body.name_ru
-    if (body.type === 'PER_PERSON' || body.type === 'PER_GROUP') patch.type = body.type
+    if (body.type) {
+      const t = sanitizeType(body.type)
+      if (!t) return json(400, { error: 'invalid type' })
+      patch.type = t
+    }
     if (body.price !== undefined) patch.price = Number(body.price || 0)
 
     const { data, error } = await supabase
@@ -75,12 +85,11 @@ export async function handler(event) {
       .eq('id', id)
       .select()
       .single()
-
     if (error) return json(400, { error: error.message })
     return json(200, data)
   }
 
-  // --- DELETE: удалить услугу
+  // DELETE: удалить услугу
   if (event.httpMethod === 'DELETE') {
     const user = requireAuth(event, true)
     if (!user) return json(401, { error: 'Unauthorized' })
