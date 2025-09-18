@@ -13,18 +13,20 @@ export default function AdminLogin(){
   async function onSubmit(e){
     e.preventDefault()
     setError('')
+    const username = (login || '').trim()
+    const pwd = (password || '').trim()
+    if(!username || !pwd){ setError('Введите логин и пароль'); return }
     setLoading(true)
     try{
       const r = await fetch('/api/admin-login', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ login, password })
+        body: JSON.stringify({ username, password: pwd }) // <-- ВАЖНО: username
       })
       const data = await r.json().catch(()=>({}))
       if(!r.ok || !data?.token){
         throw new Error(data?.error || 'Неверный логин или пароль')
       }
-      // чистим всё и сохраняем adminToken
       logoutAll()
       setAdminToken(data.token)
       nav('/admin')
