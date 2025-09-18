@@ -107,6 +107,7 @@ export default function AdminPanel(){
         <h2>Админ-панель</h2>
         <div className="row" style={{gap:8}}>
           <Link to="/" className="small">← К калькулятору</Link>
+           <Link to="/admin/users" className="small">Пользователи →</Link>
           <span className="badge">Вы вошли как админ</span>
         </div>
       </div>
