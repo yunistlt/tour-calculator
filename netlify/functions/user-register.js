@@ -1,44 +1,51 @@
 // netlify/functions/user-register.js
-import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { supabase } from './_common.js'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+export async function handler(event) {
+  try {
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
+    }
 
-const json = (code, body) => ({
-  statusCode: code,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-})
+    const { username, password } = JSON.parse(event.body || '{}')
+    if (!username || !password) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'username/password required' }) }
+    }
 
-export async function handler(event){
-  if(event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' })
+    // проверяем, что пользователя ещё нет
+    const { data: existing } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single()
 
-  let body
-  try { body = JSON.parse(event.body || '{}') } catch { return json(400, { error: 'Bad JSON' }) }
-  const username = (body.username || '').trim()
-  const password = String(body.password || '')
-  if(!username || !password) return json(400, { error: 'username/password required' })
+    if (existing) {
+      return { statusCode: 409, body: JSON.stringify({ error: 'Username already exists' }) }
+    }
 
-  // проверим, что логин свободен
-  const { data: existing } = await supabase.from('users').select('id').eq('username', username).maybeSingle()
-  if(existing) return json(409, { error: 'Username already exists' })
+    const passwordHash = await bcrypt.hash(password, 10)
 
-  const hash = await bcrypt.hash(password, 10)
-  const { data: created, error: e1 } = await supabase
-    .from('users')
-    .insert({ username, password: hash })
-    .select('id, username')
-    .single()
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{ username, password: passwordHash }])
+      .select()
+      .single()
 
-  if(e1 || !created) return json(400, { error: e1?.message || 'Create failed' })
+    if (error) throw error
 
-  // Сразу логиним нового пользователя
-  const token = jwt.sign(
-    { sub: created.id, role: 'USER', username: created.username },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' }
-  )
+    const token = jwt.sign(
+      { sub: data.id, username, role: 'USER' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    )
 
-  return json(200, { token })
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ token, user: { id: data.id, username } })
+    }
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) }
+  }
 }
