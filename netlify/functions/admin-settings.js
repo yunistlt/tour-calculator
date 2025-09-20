@@ -1,47 +1,87 @@
 // netlify/functions/admin-settings.js
 import { supabase, json, requireAuth } from './_common.js'
 
-export async function handler(event){
-  try{
-     if (event.httpMethod === 'GET') {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('agent_markup_percent')
-        .eq('id','global')
-        .maybeSingle()
-
-      if (error) return json(500, { error:'db_error', detail:error.message })
-      return json(200, { agent_markup_percent: Number(data?.agent_markup_percent ?? 0) })
+export async function handler(event) {
+  try {
+    // CORS (на всякий случай)
+    if (event.httpMethod === 'OPTIONS') {
+      return {
+        statusCode: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET,PUT,OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+        body: ''
+      }
     }
 
-    if (event.httpMethod !== 'PUT' && event.httpMethod !== 'POST') {
+    // Только GET и PUT
+    if (event.httpMethod !== 'GET' && event.httpMethod !== 'PUT') {
       return json(405, { error: 'method_not_allowed' })
     }
 
-    // только админ; если у тебя упрощённая проверка — заменишь здесь
+    if (event.httpMethod === 'GET') {
+      // Отдаём текущую наценку
+      const { data, error } = await supabase
+        .from('settings')
+        .select('agent_markup_percent')
+        .eq('id', 'global')
+        .maybeSingle()
+
+      if (error) {
+        console.error('admin-settings GET db_error:', error)
+        return json(500, { error: 'db_error', detail: error.message })
+      }
+      return json(200, { agent_markup_percent: Number(data?.agent_markup_percent ?? 0) })
+    }
+
+    // PUT — сохранить наценку
     const user = requireAuth(event)
+    // Пропускаем только «админа» (у тебя куётся токен с role=ADMIN)
     if (!user || (user.role !== 'ADMIN' && user.username !== process.env.ADMIN_USERNAME)) {
       return json(403, { error: 'forbidden' })
     }
 
-    const { agent_markup_percent } = JSON.parse(event.body || '{}')
-    const pct = Number(agent_markup_percent)
-    if (Number.isNaN(pct)) return json(400, { error: 'bad_percent' })
+    let body = {}
+    try { body = JSON.parse(event.body || '{}') } catch { body = {} }
 
-    // гарантируем единственную запись с id='global'
-    const row = {
-      id: 'global',
+    const pct = Number(body.agent_markup_percent)
+    if (!Number.isFinite(pct)) {
+      return json(400, { error: 'bad_percent' })
+    }
+
+    // Сначала UPDATE
+    const updatePayload = {
       agent_markup_percent: pct,
       updated_at: new Date().toISOString(),
     }
 
-    const { error } = await supabase
+    const { data: updData, error: updErr } = await supabase
       .from('settings')
-      .upsert(row, { onConflict: 'id' })   // требует уникальный ключ/PK по id
-    if (error) return json(500, { error: 'db_error', detail: error.message })
+      .update(updatePayload)
+      .eq('id', 'global')
+      .select('id') // чтобы понять, сколько строк затронули
+      .maybeSingle()
 
-    return json(200, { ok:true, agent_markup_percent: pct })
-  }catch(e){
-    return json(500, { error: 'server_error', detail: String(e.message||e) })
+    if (updErr) {
+      console.error('admin-settings PUT update_error:', updErr)
+      // Падать не будем — попробуем вставить новую строку
+    }
+
+    if (!updData) {
+      // Не было строки с id='global' — создаём
+      const insertRow = { id: 'global', ...updatePayload }
+      const { error: insErr } = await supabase.from('settings').insert(insertRow)
+      if (insErr) {
+        console.error('admin-settings PUT insert_error:', insErr)
+        return json(500, { error: 'db_error', detail: insErr.message })
+      }
+    }
+
+    return json(200, { ok: true, agent_markup_percent: pct })
+  } catch (e) {
+    console.error('admin-settings server_error:', e)
+    return json(500, { error: 'server_error', detail: String(e?.message || e) })
   }
 }
