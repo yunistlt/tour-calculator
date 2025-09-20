@@ -194,6 +194,52 @@ export default function App(){
     }
   }
 
+// ДОБАВЬТЕ в App.jsx рядом с openScenarioList / loadScenario:
+async function deleteScenario(item){
+  try{
+    // Если есть токен — пробуем удалить на сервере
+    if (userToken || AUTH_DISABLED) {
+      // 1) основной вариант: DELETE /api/scenarios?id=...
+      let r = await fetch(`/api/scenarios?id=${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+        headers: userToken ? { Authorization: 'Bearer '+userToken } : undefined
+      })
+
+      // 2) fallback: некоторые бэки ожидают id в body
+      if (!r.ok) {
+        r = await fetch(`/api/scenarios`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type':'application/json',
+            ...(userToken ? { Authorization: 'Bearer '+userToken } : {})
+          },
+          body: JSON.stringify({ id: item.id })
+        })
+      }
+
+      if(!r.ok){
+        const data = await r.json().catch(()=>({}))
+        throw new Error(data.error || 'delete_failed')
+      }
+    } else {
+      // Гостевой режим: удаляем из localStorage
+      const key = 'tc_scenarios'
+      const arr = JSON.parse(localStorage.getItem(key) || '[]')
+      const rest = arr.filter(x => x.id !== item.id)
+      localStorage.setItem(key, JSON.stringify(rest))
+    }
+
+    // Обновляем список в модалке (удаляем локально)
+    setOpenList(prev => prev.filter(x => x.id !== item.id))
+
+    // Если удалили текущий открытый сценарий — сбрасываем текущий id
+    setCurrentScenarioId(prev => prev === item.id ? null : prev)
+  }catch(e){
+    alert('Не удалось удалить: ' + String(e.message || e))
+  }
+}
+
+
   function saveLocal(obj){
     const key = 'tc_scenarios'
     const arr = JSON.parse(localStorage.getItem(key) || '[]')
@@ -547,18 +593,35 @@ function OpenModal({ list, loading, error, onClose, onOpenItem }){
           <h3 style={{margin:0}}>Открыть сохранённый проект</h3>
           <button className="secondary btn-sm" onClick={onClose}>✕</button>
         </div>
+
         {loading && <div style={{opacity:.7}}>Загрузка…</div>}
         {error && <div style={{color:'#b00020'}}>Ошибка: {error}</div>}
         {!loading && list.length===0 && <div style={{opacity:.7}}>Пока ничего нет</div>}
 
         <div style={{display:'grid', gap:8, marginTop:8, maxHeight:360, overflow:'auto'}}>
           {list.map(item=>(
-            <button key={item.id} style={openRow} onClick={()=>onOpenItem(item)}>
-              <div style={{fontWeight:600, textAlign:'left'}}>{item.name || 'Без названия'}</div>
-              <div style={{opacity:.6, fontSize:12}}>
-                {item.created_at? new Date(item.created_at).toLocaleString() : ''}
-              </div>
-            </button>
+            <div key={item.id} style={{display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, alignItems:'center'}}>
+              <button style={{...openRow, margin:0}} onClick={()=>onOpenItem(item)}>
+                <div style={{fontWeight:600, textAlign:'left', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                  {item.name || 'Без названия'}
+                </div>
+                <div style={{opacity:.6, fontSize:12}}>
+                  {item.created_at? new Date(item.created_at).toLocaleString() : ''}
+                </div>
+              </button>
+              <button
+                className="secondary btn-sm"
+                title="Удалить"
+                onClick={()=>{
+                  if(confirm(`Удалить проект «${item.name || 'Без названия'}»?`)){
+                    deleteScenario(item)
+                  }
+                }}
+                style={{height:36, padding:'0 10px'}}
+              >
+                🗑️
+              </button>
+            </div>
           ))}
         </div>
       </div>
