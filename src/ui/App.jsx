@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 import { useAuth } from './store'
 
 const AUTH_DISABLED = String(import.meta.env.VITE_AUTH_DISABLED || '').toLowerCase() === 'true'
-const MAX_FILE_MB = 100
 
 export default function App(){
   const { userToken } = useAuth()
@@ -16,13 +15,13 @@ export default function App(){
   const [description, setDescription] = useState('')
   const [projectName, setProjectName] = useState('Новый проект')
 
+  // текущий сценарий (для PUT)
+  const [currentScenarioId, setCurrentScenarioId] = useState(null)
+
   // справочник и выбранные позиции
   const [services, setServices] = useState([])
   const [tourItems, setTourItems] = useState([])   // на весь тур
   const [dayItems, setDayItems] = useState({})     // { [day]: [{id,name_ru,type,price,repeats}] }
-
-  // файлы, прикреплённые к текущему сценарию
-  const [files, setFiles] = useState([]) // [{name,size,url}]
 
   // наценка агента
   const [agentPct, setAgentPct] = useState(0)
@@ -153,10 +152,10 @@ export default function App(){
   // ====== сохранение/открытие ======
   function snapshot() {
     return {
+      id: currentScenarioId || undefined,
       name: projectName || 'Без названия',
       days, participants: N, singles: S, description,
       tourItems, dayItems, agentPct,
-      files, // <-- прикреплённые файлы по текущему сценарию
       created_at: new Date().toISOString()
     }
   }
@@ -169,17 +168,26 @@ export default function App(){
         alert('Сценарий сохранён локально')
         return
       }
-      const r = await fetch('/api/scenarios', {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          ...(userToken? { Authorization:'Bearer '+userToken } : {})
-        },
-        body: JSON.stringify(body)
-      })
-      const data = await r.json().catch(()=>({}))
-      if(!r.ok) throw new Error(data.error || 'save_failed')
-      alert('Сценарий сохранён')
+      if (currentScenarioId) {
+        const r = await fetch('/api/scenarios', {
+          method:'PUT',
+          headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+userToken },
+          body: JSON.stringify({ id: currentScenarioId, ...body })
+        })
+        const data = await r.json().catch(()=>({}))
+        if(!r.ok) throw new Error(data.error || 'save_failed')
+        alert('Сценарий обновлён')
+      } else {
+        const r = await fetch('/api/scenarios', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+userToken },
+          body: JSON.stringify(body)
+        })
+        const data = await r.json().catch(()=>({}))
+        if(!r.ok) throw new Error(data.error || 'save_failed')
+        setCurrentScenarioId(data.id)
+        alert('Сценарий сохранён')
+      }
     }catch(e){
       saveLocal(body)
       alert('Сохранил локально. Причина: '+String(e.message||e))
@@ -201,7 +209,7 @@ export default function App(){
     setDescription('')
     setTourItems([])
     setDayItems({})
-    setFiles([])
+    setCurrentScenarioId(null)
   }
 
   async function openScenarioList(){
@@ -239,7 +247,7 @@ export default function App(){
       setTourItems(Array.isArray(s.tourItems)? s.tourItems : [])
       setDayItems(s.dayItems && typeof s.dayItems==='object'? s.dayItems : {})
       if(typeof s.agentPct!=='undefined') setAgentPct(Number(s.agentPct||0))
-      setFiles(Array.isArray(s.files)? s.files : [])
+      setCurrentScenarioId(s.id || null)
       setOpenModal(false)
     }catch(e){
       alert('Не удалось открыть: '+String(e.message||e))
@@ -293,9 +301,6 @@ export default function App(){
           groupTotalWithAgent={groupTotalWithAgent}
           agentReward={agentReward}
           agentPct={agentPct}
-          // файлы
-          files={files} setFiles={setFiles}
-          userToken={userToken}
         />
       </div>
 
@@ -312,7 +317,7 @@ export default function App(){
   )
 }
 
-/** ===== КОМПОНЕНТЫ ===== */
+/** ===== КОМПОНЕНТЫ (как в согласованной версии) ===== */
 
 function HeaderBar({
   projectName, setProjectName,
@@ -465,51 +470,8 @@ function RightPanel({
   singles, onSinglesChange,
   N, maxAllowed, onParticipantsChange,
   description, setDescription,
-  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct,
-  // файлы
-  files, setFiles, userToken
+  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
 }){
-  async function onSelectFiles(e){
-    const list = Array.from(e.target.files||[])
-    if(!list.length) return
-
-    // проверяем размер
-    const overs = list.filter(f => f.size > MAX_FILE_MB*1024*1024)
-    if(overs.length){
-      alert(`Файл(ы) превышают ${MAX_FILE_MB} МБ: ${overs.map(f=>f.name).join(', ')}`)
-      return
-    }
-
-    // грузим по одному
-    const uploaded = []
-    for (const f of list){
-      try{
-        const fd = new FormData()
-        fd.append('file', f)
-        const r = await fetch('/api/upload', {
-          method:'POST',
-          headers: userToken ? { Authorization: 'Bearer '+userToken } : undefined,
-          body: fd
-        })
-        const data = await r.json()
-        if(!r.ok) throw new Error(data.error || 'upload_failed')
-        // ожидаем, что вернёт { url } или { publicUrl }
-        uploaded.push({ name: f.name, size: f.size, url: data.url || data.publicUrl || '' })
-      }catch(err){
-        alert(`Не удалось загрузить ${f.name}: ${String(err.message||err)}`)
-      }
-    }
-    if(uploaded.length){
-      setFiles([ ...uploaded, ...files ])
-    }
-    // очистим инпут
-    e.target.value = ''
-  }
-
-  function removeFile(url){
-    setFiles(files.filter(x=>x.url!==url))
-  }
-
   return (
     <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
       <div style={card}>
@@ -524,27 +486,9 @@ function RightPanel({
           <label>Участников (макс {maxAllowed})
             <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
           </label>
-
           <label>Описание
             <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Свободный текст: заметки, список участников, детали..." />
           </label>
-
-          <div>
-            <div style={{fontWeight:600, margin:'6px 0 6px'}}>Файлы (до {MAX_FILE_MB} МБ/файл)</div>
-            <input type="file" multiple onChange={onSelectFiles} />
-            {files.length>0 && (
-              <div style={{marginTop:8, display:'grid', gap:6}}>
-                {files.map(f=>(
-                  <div key={f.url || f.name} style={{display:'grid', gridTemplateColumns:'1fr auto', gap:8, alignItems:'center'}}>
-                    <a href={f.url || '#'} target="_blank" rel="noreferrer" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-                      {f.name} <span style={{opacity:.6}}>({(f.size/1024/1024).toFixed(2)} МБ)</span>
-                    </a>
-                    <button className="secondary btn-sm" onClick={()=>removeFile(f.url)}>Удалить</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         <hr style={{margin:'12px 0'}} />
@@ -642,5 +586,5 @@ const openRow = {
   display:'grid', gridTemplateColumns:'1fr auto', gap:8,
   padding:'10px 12px', border:'1px solid #e6eef6', borderRadius:10,
   background:'#fafcff', cursor:'pointer', textAlign:'left',
-  color:'#222' // чтобы текст точно читался на светлом фоне
+  color:'#222'
 }
