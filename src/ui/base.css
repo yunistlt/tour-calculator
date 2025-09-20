@@ -1,196 +1,108 @@
-/* ======== Тема: светлая, жизнерадостная (голубой/зеленый/белый) ======== */
 :root{
-  --bg: #f7fbff;
-  --bg-accent: linear-gradient(180deg,#eef8ff 0%, #f8fffb 100%);
-  --text: #0f1b2d;
-  --muted: #5b6b7b;
-
-  --brand: #2bb673;          /* мятный зелёный */
-  --brand-2: #37a6f2;        /* небесно-голубой */
-  --brand-3: #19c1ad;        /* бирюзовый */
-  --brand-hover: #22a866;
-
-  --card-bg: #ffffff;
-  --card-brd: #e6eef6;
-  --shadow: 0 10px 30px rgba(26,86,219,0.08);
-
-  --radius: 16px;
-  --radius-lg: 22px;
-
-  --input-bg: #ffffff;
-  --input-brd: #d8e4f0;
-
-  --table-brd: #e8f0f7;
-  --table-row-alt: #f9fcff;
-
-  --chip-bg: #e8fff6;
-  --chip-brd: #bdf3df;
-  --chip-text: #0f5132;
-
-  --danger: #e5484d;
-  --danger-bg: #fff2f2;
-  --danger-brd: #ffd7d7;
+  --bg:#f5fbff;
+  --card:#ffffff;
+  --ink:#0b2b3b;
+  --muted:#5b7a86;
+  --brand:#0ea5a5;
+  --brand-2:#38bdf8;
+  --line:#e6eef6;
+  --radius:16px;
+  --shadow:0 8px 24px rgba(11,43,59,.06), 0 2px 6px rgba(11,43,59,.05);
 }
 
-*{box-sizing:border-box}
-html,body{height:100%}
+*{ box-sizing:border-box }
+html, body, #root{ height:100% }
 body{
   margin:0;
-  color:var(--text);
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  background: var(--bg-accent);
+  font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:var(--ink);
+  background:linear-gradient(180deg, #f0fbff 0%, #f6fffe 100%);
+  overflow:hidden; /* важно: скролл только у центральной колонки */
 }
 
-/* ======== Контейнер и шапка ======== */
-.container{
-  max-width:1100px;
-  margin:0 auto;
-  padding:24px;
+a{ color:var(--brand); text-decoration:none }
+a:hover{ text-decoration:underline }
+
+.container{ max-width:100%; margin:0 auto }
+
+.topbar{
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
+  color:white;
+  border-radius: 0 0 calc(var(--radius) + 8px) calc(var(--radius) + 8px);
+  padding:16px 20px;
+  box-shadow: var(--shadow);
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
 }
+.topbar h2{ margin:0; font-size:20px; letter-spacing:.2px }
+.topbar .row{ display:flex; gap:10px; align-items:center }
 
-.header{
-  display:flex;
-  gap:16px;
-  align-items:center;
-  justify-content:space-between;
-  margin:0 0 16px 0;
-}
-
-.header h2{
-  margin:0;
-  font-size:28px;
-  letter-spacing:.2px;
-}
-
-/* неброская цветная «полоска настроения» под шапкой */
-.container::before{
-  content:"";
-  display:block;
-  height:8px;
-  width:100%;
-  border-radius:999px;
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 60%, var(--brand-3) 100%);
-  margin:0 0 16px 0;
-  opacity:.25;
-}
-
-/* ======== Карточки ======== */
-.card{
-  background:var(--card-bg);
-  border:1px solid var(--card-brd);
-  border-radius:var(--radius-lg);
-  padding:20px;
-  box-shadow:var(--shadow);
-  margin-bottom:16px;
-}
-
-/* ======== Тексты и ссылки ======== */
-a{color:var(--brand-2);text-decoration:none}
-a:hover{text-decoration:underline}
-
-.small{opacity:.8;color:var(--muted);font-size:12px}
-
-/* ======== Формы ======== */
-label{display:block;margin:0 0 6px 4px;font-size:13px;color:var(--muted)}
-input,select,button,textarea{
-  width:100%;
-  padding:12px 14px;
-  border-radius:14px;
-  border:1px solid var(--input-brd);
-  background:var(--input-bg);
-  color:var(--text);
-  margin:6px 0 12px 0;
-  outline:none;
-  transition:border-color .15s ease, box-shadow .15s ease, transform .02s ease;
-}
-input:focus,select:focus,textarea:focus{
-  border-color: var(--brand-2);
-  box-shadow: 0 0 0 3px rgba(55,166,242,0.15);
-}
-
-/* Кнопки */
 button{
-  cursor:pointer;
-  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-3) 100%);
-  color:#fff;
-  border:none;
-  font-weight:600;
-  letter-spacing:.2px;
-  box-shadow: 0 6px 18px rgba(41,171,135,0.25);
+  border:0; padding:10px 14px; border-radius:10px; cursor:pointer;
+  background:var(--brand); color:#fff; box-shadow:var(--shadow);
 }
-button:hover{filter:brightness(1.02)}
-button:active{transform:translateY(1px)}
-button.secondary{
-  background:#fff;color:var(--brand);
-  border:1px solid var(--input-brd);
-  box-shadow:none;
+button.secondary{ background:#f4f8fb; color:var(--ink); border:1px solid var(--line) }
+button.btn-sm{ padding:7px 10px; font-size:14px }
+
+.small{ font-size:13px; color:var(--muted) }
+label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px }
+input, select, textarea{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+  background:#fff; color:var(--ink); outline:none;
 }
-button.danger{
-  background: var(--danger);
-  box-shadow: 0 6px 18px rgba(229,72,77,.2);
+input:focus, select:focus, textarea:focus{
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px rgba(56,189,248,.2)
 }
+textarea{ resize:vertical }
 
-/* Компактные кнопки (в таблицах) */
-.btn-sm{padding:8px 12px;font-size:13px;border-radius:12px}
-
-/* ======== Сетки и адаптив ======== */
-.row{display:flex;gap:12px;flex-wrap:wrap}
-.row>div{flex:1 1 240px}
-
-/* ======== Бейджи/чипы ======== */
-.badge{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:6px 10px;border-radius:999px;
-  border:1px solid var(--chip-brd);
-  background:var(--chip-bg); color:var(--chip-text);
-  font-size:12px; font-weight:600;
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:14px;
+  box-shadow:var(--shadow);
 }
 
-/* Ошибки/предупреждения */
-.alert{
-  padding:10px 12px;border-radius:12px;margin-top:8px;
-  background:var(--danger-bg); border:1px solid var(--danger-brd); color:#7a1d20;
-  font-size:13px;
+.row{ display:flex; gap:12px; flex-wrap:wrap }
+.row > *{ flex:1 1 220px }
+
+.table{ width:100%; border-collapse: collapse }
+.table th, .table td{
+  padding:10px 12px; border-top:1px solid var(--line); vertical-align:top;
+}
+.table thead th{ font-size:12px; color:var(--muted); font-weight:600; border-top:0 }
+.table tr:hover td{ background:#f9fdff }
+
+/* Трёхколоночная сетка: 25vw | авто | 20vw */
+.shell{
+  display:grid;
+  grid-template-rows: auto 1fr;
+  height:100vh;
+}
+.grid{
+  display:grid;
+  grid-template-columns: 25vw 1fr 20vw;
+  gap:16px;
+  padding:16px;
+  height:100%;
+}
+.sidebar-left, .sidebar-right{
+  position:sticky;
+  top:0;
+  height: calc(100vh - 0px); /* закрепляем, не скроллим с центром */
+  overflow:auto; /* если контента много, скролл внутри боковой панели */
+  padding-bottom:16px;
+}
+.center{
+  height:100%;
+  overflow:auto; /* центральная колонка скроллится */
+  padding-bottom:24px;
 }
 
-/* ======== Таблицы ======== */
-.table{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px;border:1px solid var(--table-brd);border-radius:14px;overflow:hidden}
-.table thead th{
-  background:linear-gradient(180deg,#f4fbff 0%,#f8fffb 100%);
-  color:#3a4b5a;
-  font-weight:600;
-  font-size:13px;
-  text-align:left;
-  padding:10px 12px;
-  border-bottom:1px solid var(--table-brd);
+/* «чипсы» услуг */
+.tags{ display:flex; gap:8px; flex-wrap:wrap }
+.service-chip{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#f7fdff;
 }
-.table td{
-  padding:10px 12px;
-  border-bottom:1px solid var(--table-brd);
-}
-.table tr:nth-child(even) td{background:var(--table-row-alt)}
-.table tr:hover td{background:#f2fbff}
-
-/* Кнопки в таблицах в одну линию */
-.table .row{gap:8px}
-.table button{width:auto}
-
-/* ======== Мобильная адаптация ======== */
-@media (max-width: 720px){
-  .container{padding:16px}
-  .header h2{font-size:22px}
-  .card{padding:16px}
-  .row>div{flex:1 1 100%}
-  button{width:100%}
-  .table thead{display:none}
-  .table tr{display:block;border-bottom:1px solid var(--table-brd);margin-bottom:8px}
-  .table td{display:flex;justify-content:space-between;gap:12px}
-  .table td::before{
-    content: attr(data-label);
-    color:var(--muted);
-    font-size:12px;
-  }
-}
-
-/* ======== Подсказки/тосты (на будущее) ======== */
-.toast{position:fixed;right:16px;bottom:16px;background:#ffffff;border:1px solid var(--card-brd);color:var(--text);border-radius:14px;padding:12px 16px;box-shadow:var(--shadow)}
+.service-chip:hover{ border-color:#b9e9f6 }
