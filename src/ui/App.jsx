@@ -105,7 +105,7 @@ export default function App(){
   function onParticipantsChange(v){
     const raw = Number(v||0)
     if(raw > maxAllowed){
-      alert(`Макс участников: ${maxAllowed} (при ${S} single).`)
+    alert(`Макс участников: ${maxAllowed} (при ${S} single).`)
       setParticipants(maxAllowed)
     } else {
       setParticipants(Math.max(1, raw))
@@ -254,9 +254,8 @@ export default function App(){
     }
   }
 
-  // ===== РЕНДЕР =====
   return (
-    <div style={{display:'grid', gridTemplateRows:'auto 1fr', height:'100vh'}}>
+    <div className="page">
       <HeaderBar
         projectName={projectName}
         setProjectName={setProjectName}
@@ -269,39 +268,45 @@ export default function App(){
         onOpen={openScenarioList}
       />
 
-      <div style={{display:'grid', gridTemplateColumns:'1.2fr 2.4fr 1fr', height:'100%', gap:12, padding:12}}>
-        <LeftCatalog
-          tourCatalog={tourCatalog}
-          dailyCatalog={dailyCatalog}
-          daysArr={daysArr}
-          toggleTourItem={toggleTourItem}
-          addDailyToAllDays={addDailyToAllDays}
-          addDailyToDay={addDailyToDay}
-        />
+      <div className="layout"><!-- GRID-КОНТЕЙНЕР -->
+        <div className="col-left sideSticky">
+          <LeftCatalog
+            tourCatalog={tourCatalog}
+            dailyCatalog={dailyCatalog}
+            daysArr={daysArr}
+            toggleTourItem={toggleTourItem}
+            addDailyToAllDays={addDailyToAllDays}
+            addDailyToDay={addDailyToDay}
+          />
+        </div>
 
-        <CenterDays
-          daysArr={daysArr}
-          dayItems={dayItems}
-          setRepeats={setRepeats}
-          toggleItem={toggleItem}
-          tourItems={tourItems}
-          setTourRepeats={setTourRepeats}
-          toggleTourItem={toggleTourItem}
-          N={N}
-        />
+        <div className="col-center">
+          <CenterDays
+            daysArr={daysArr}
+            dayItems={dayItems}
+            setRepeats={setRepeats}
+            toggleItem={toggleItem}
+            tourItems={tourItems}
+            setTourRepeats={setTourRepeats}
+            toggleTourItem={toggleTourItem}
+            N={N}
+          />
+        </div>
 
-        <RightPanel
-          days={days} setDays={setDays}
-          singles={singles} onSinglesChange={onSinglesChange}
-          N={N} maxAllowed={maxAllowed} onParticipantsChange={onParticipantsChange}
-          description={description} setDescription={setDescription}
-          perPersonTotal={perPersonTotal}
-          perPersonWithAgent={perPersonWithAgent}
-          groupTotal={groupTotal}
-          groupTotalWithAgent={groupTotalWithAgent}
-          agentReward={agentReward}
-          agentPct={agentPct}
-        />
+        <div className="col-right sideSticky">
+          <RightPanel
+            days={days} setDays={setDays}
+            singles={singles} onSinglesChange={onSinglesChange}
+            N={N} maxAllowed={maxAllowed} onParticipantsChange={onParticipantsChange}
+            description={description} setDescription={setDescription}
+            perPersonTotal={perPersonTotal}
+            perPersonWithAgent={perPersonWithAgent}
+            groupTotal={groupTotal}
+            groupTotalWithAgent={groupTotalWithAgent}
+            agentReward={agentReward}
+            agentPct={agentPct}
+          />
+        </div>
       </div>
 
       {openModal && (
@@ -317,7 +322,7 @@ export default function App(){
   )
 }
 
-/** ===== КОМПОНЕНТЫ (как в согласованной версии) ===== */
+/** ===== КОМПОНЕНТЫ ===== */
 
 function HeaderBar({
   projectName, setProjectName,
@@ -332,37 +337,27 @@ function HeaderBar({
   }
   return (
     <div style={{...bg, position:'sticky', top:0, zIndex:10, borderBottom:'1px solid #e6eef6'}}>
-      <div style={{
-        display:'grid',
-        gridTemplateColumns:'1fr auto auto auto',
-        gap:12, alignItems:'center',
-        padding:'12px 16px',
-      }}>
-        <div style={{display:'flex', alignItems:'center', gap:12, minWidth:0}}>
+      <div className="topbar">
+        <div className="topbar__title">
           <div style={{fontSize:18, fontWeight:800, whiteSpace:'nowrap'}}>
             🌴 Калькулятор эвентов и туров
           </div>
           <input
             value={projectName}
             onChange={e=>setProjectName(e.target.value)}
-            style={{
-              minWidth:180, maxWidth:360, width:'100%',
-              padding:'8px 10px', border:'1px solid #ffffff44',
-              borderRadius:8, background:'#ffffff22', color:'#fff',
-              outline:'none'
-            }}
+            className="topbar__projectInput"
             placeholder="Название проекта"
           />
         </div>
 
-        <div style={{justifySelf:'end', display:'flex', gap:8, flexWrap:'wrap'}}>
-          <button onClick={onNew} style={btnWhite}>+ Новый</button>
-          <button onClick={onSave} style={btnWhite}>💾 Сохранить</button>
-          <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
-          <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
+        <div className="topbar__actions">
+          <button onClick={onNew} className="btn-white">+ Новый</button>
+          <button onClick={onSave} className="btn-white">💾 Сохранить</button>
+          <button onClick={onOpen} className="btn-white">📂 Открыть</button>
+          <Link to="/admin/login" className="btn-white" style={{textDecoration:'none'}}>Админ →</Link>
         </div>
 
-        <div style={{justifySelf:'end', fontSize:12, lineHeight:1.2, textAlign:'right', opacity:.95}}>
+        <div className="topbar__totals">
           <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
           <div>Итого по группе (с агентом): <b>{groupTotalWithAgent.toFixed(2)}</b></div>
           <div>Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
@@ -374,7 +369,7 @@ function HeaderBar({
 
 function LeftCatalog({ tourCatalog, dailyCatalog, daysArr, toggleTourItem, addDailyToAllDays, addDailyToDay }){
   return (
-    <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
+    <div>
       <div style={card}>
         <h4 style={{marginTop:0, marginBottom:8}}>Каталог услуг</h4>
 
@@ -422,7 +417,7 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
           <div key={d} style={card}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
               <h4 style={{margin:0}}>День {d}</h4>
-              <span style={{fontSize:12, opacity:.7}}>
+              <span className="muted">
                 На чел/день: <b>{(dayItems[d]||[]).reduce((acc,it)=>{
                   const price = Number(it.price||0); const reps = Math.max(1, Number(it.repeats||1))
                   if(it.type==='PER_PERSON') return acc + price*reps
@@ -434,10 +429,10 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
 
             <div style={{display:'grid', gap:8}}>
               {(dayItems[d]||[]).map(it=>(
-                <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
+                <div key={it.id} className="grid-row">
                   <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>({it.type==='PER_PERSON'?'на чел':'на группу'})</span></div>
                   <input type="number" value={it.repeats} onChange={e=>setRepeats(d, it.id, e.target.value)} />
-                  <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
+                  <div className="cell-right">{Number(it.price||0).toFixed(2)}</div>
                   <button className="secondary btn-sm" onClick={()=>toggleItem(d, it)}>убрать</button>
                 </div>
               ))}
@@ -450,10 +445,10 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
             <h4 style={{marginTop:0}}>Услуги на весь тур</h4>
             <div style={{display:'grid', gap:8}}>
               {tourItems.map(it=>(
-                <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
+                <div key={it.id} className="grid-row">
                   <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>(на тур)</span></div>
                   <input type="number" value={it.repeats} onChange={e=>setTourRepeats(it.id, e.target.value)}/>
-                  <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
+                  <div className="cell-right">{Number(it.price||0).toFixed(2)}</div>
                   <button className="secondary btn-sm" onClick={()=>toggleTourItem({id:it.id})}>убрать</button>
                 </div>
               ))}
@@ -473,7 +468,7 @@ function RightPanel({
   perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
 }){
   return (
-    <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
+    <div>
       <div style={card}>
         <h4 style={{marginTop:0}}>Параметры тура</h4>
         <div style={{display:'grid', gap:8}}>
@@ -560,20 +555,11 @@ function OpenModal({ list, loading, error, onClose, onOpenItem }){
   )
 }
 
-/* ——— стили ——— */
+/* ——— стили в JS (как и было) ——— */
 const card = { background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12 }
 const svcCard = { background:'#f8fbff', border:'1px solid #e6eef6', borderRadius:10, padding:10 }
 const priceBadge = { padding:'2px 8px', borderRadius:999, background:'#e8f4ff', border:'1px solid #cfe7ff', fontSize:12 }
 const input = { width:'100%', padding:'8px 10px', border:'1px solid #d7e1eb', borderRadius:8, outline:'none' }
-const btnWhite = {
-  padding:'8px 12px',
-  border:'1px solid #ffffffaa',
-  background:'#ffffff22',
-  backdropFilter:'blur(2px)',
-  color:'#fff',
-  borderRadius:10,
-  cursor:'pointer'
-}
 const modalWrap = {
   position:'fixed', inset:0, background:'rgba(0,0,0,.35)',
   display:'grid', placeItems:'center', zIndex:50
