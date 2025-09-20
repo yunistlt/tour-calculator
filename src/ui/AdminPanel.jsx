@@ -6,6 +6,7 @@ import { useNavigate, Link } from 'react-router-dom'
 export default function AdminPanel(){
   const nav = useNavigate()
   const { adminToken } = useAuth()
+
   const [agentPct, setAgentPct] = useState(0)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -37,15 +38,15 @@ export default function AdminPanel(){
   }
 
   return (
-    <div style={{maxWidth:900, margin:'20px auto', padding:'0 16px'}}>
+    <div className="admin-page">
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-        <h2>Админ · Настройки</h2>
+        <h2 style={{margin:0}}>Админ · Настройки</h2>
         <Link to="/admin" style={{textDecoration:'none'}}>← Назад</Link>
       </div>
 
-      <div style={{background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:16, boxShadow:'0 8px 24px rgba(11,43,59,.06)'}}>
+      <div style={{background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:16, boxShadow:'0 8px 24px rgba(11,43,59,.06)', marginBottom:16}}>
         <h3 style={{marginTop:0}}>Наценка агента</h3>
-        <p style={{marginTop:0, color:'#5b7a86'}}>Процент наценки, который будет прибавлен к стоимости тура. Во фронте показывается «Вознаграждение агента» и «Рекомендованная цена/чел».</p>
+        <p style={{marginTop:0, color:'#5b7a86'}}>Процент наценки добавляется к себестоимости. Во фронте видно «Вознаграждение агента» и «Рекомендованная цена/чел».</p>
         <div style={{display:'flex', gap:12, alignItems:'center', flexWrap:'wrap'}}>
           <label style={{fontSize:12, color:'#5b7a86'}}>Процент</label>
           <input
@@ -62,6 +63,8 @@ export default function AdminPanel(){
           {msg && <span style={{color:'#0b2b3b'}}>{msg}</span>}
         </div>
       </div>
+
+      {/* сюда можно вернуть другие карточки админки, список услуг и т.д. */}
     </div>
   )
 }
