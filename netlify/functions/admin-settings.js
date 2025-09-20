@@ -3,6 +3,17 @@ import { supabase, json, requireAuth } from './_common.js'
 
 export async function handler(event){
   try{
+     if (event.httpMethod === 'GET') {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('agent_markup_percent')
+        .eq('id','global')
+        .maybeSingle()
+
+      if (error) return json(500, { error:'db_error', detail:error.message })
+      return json(200, { agent_markup_percent: Number(data?.agent_markup_percent ?? 0) })
+    }
+
     if (event.httpMethod !== 'PUT' && event.httpMethod !== 'POST') {
       return json(405, { error: 'method_not_allowed' })
     }
