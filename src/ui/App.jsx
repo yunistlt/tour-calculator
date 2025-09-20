@@ -1,336 +1,406 @@
 // src/ui/App.jsx
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from './store'
 
-// ---------- константы/утилиты ----------
-const card = {
-  background: '#fff',
-  border: '1px solid #e7eef6',
-  borderRadius: 12,
-  padding: 16,
-}
+const AUTH_DISABLED = String(import.meta.env.VITE_AUTH_DISABLED || '').toLowerCase() === 'true'
+const MAX_FILE_MB = 100
 
-const TYPE_PER_PERSON = 'PER_PERSON'  // за человека (в день)
-const TYPE_PER_GROUP  = 'PER_GROUP'   // за группу (в день)
-const TYPE_PER_TOUR   = 'PER_TOUR'    // за группу (на весь тур)
-
-const money = (x) => Number(x || 0).toFixed(2)
-
-function cryptoRandom(){
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
-// =======================================
-//                APP
-// =======================================
 export default function App(){
-  const { user } = useAuth()
+  const { userToken } = useAuth()
 
-  // имя проекта в шапке
-  const [projectName, setProjectName] = React.useState('Новый проект')
+  // ====== базовые параметры ======
+  const [days, setDays] = useState(1)
+  const [participants, setParticipants] = useState(2)
+  const [singles, setSingles] = useState(0)
+  const [description, setDescription] = useState('')
+  const [projectName, setProjectName] = useState('Новый проект')
 
-  // глобальные настройки (наценка агента)
-  const [settings, setSettings] = React.useState({ agent_markup_percent: 0 })
-  const agentPct  = Number(settings?.agent_markup_percent ?? 0)
-  const agentCoef = React.useMemo(() => 1 + agentPct/100, [agentPct])
+  // справочник и выбранные позиции
+  const [services, setServices] = useState([])
+  const [tourItems, setTourItems] = useState([])   // на весь тур
+  const [dayItems, setDayItems] = useState({})     // { [day]: [{id,name_ru,type,price,repeats}] }
 
-  // каталог услуг
-  const [services, setServices] = React.useState([])
+  // файлы, прикреплённые к текущему сценарию
+  const [files, setFiles] = useState([]) // [{name,size,url}]
 
-  // параметры тура
-  const [days, setDays] = React.useState(1)
-  const [singles, setSingles] = React.useState(0) // одноместные размещения
-  // максимум участников: 10 двухместных номеров = 20 мест, минус синглы
-  const maxAllowed = React.useMemo(() => Math.max(1, 20 - Number(singles || 0)), [singles])
-  const [N, setN] = React.useState(2)
-  const [description, setDescription] = React.useState('')
+  // наценка агента
+  const [agentPct, setAgentPct] = useState(0)
 
-  // выбранные услуги
-  const [items, setItems] = React.useState({
-    byDay: { 1: [] },  // { [day]: [{id, serviceId}] }
-    perTour: [],       // [{id, serviceId}]
-  })
+  // «Открыть» — модалка/данные
+  const [openModal, setOpenModal] = useState(false)
+  const [openList, setOpenList] = useState([])
+  const [loadingOpen, setLoadingOpen] = useState(false)
+  const [errorOpen, setErrorOpen] = useState('')
 
-  // ------ загрузка настроек (байпас кэша, чтобы не залипало 25%) ------
-  React.useEffect(() => {
-    let alive = true
-    async function fetchSettings(){
-      try{
-        const r = await fetch(`/api/public-settings?t=${Date.now()}`, { cache:'no-store' })
-        const d = await r.json()
-        const pct = Number(d?.agent_markup_percent ?? 0)
-        if (alive) setSettings({ agent_markup_percent: pct })
-      }catch{
-        if (alive) setSettings({ agent_markup_percent: 0 })
-      }
-    }
-    fetchSettings()
-    const onVis = () => { if (!document.hidden) fetchSettings() }
-    document.addEventListener('visibilitychange', onVis)
-    const timer = setInterval(fetchSettings, 20000)
-    return () => { alive=false; document.removeEventListener('visibilitychange', onVis); clearInterval(timer) }
+  // ====== загрузки справочников/настроек ======
+  useEffect(()=>{
+    fetch('/api/services')
+      .then(r=>r.json()).then(d=> setServices(Array.isArray(d)? d:[]))
+      .catch(()=> setServices([]))
+
+    fetch('/api/public-settings')
+      .then(r=>r.json()).then(d=> setAgentPct(Number(d?.agent_markup_percent || 0)))
+      .catch(()=> setAgentPct(0))
   }, [])
 
-  // ------ загрузка каталога услуг (без кэша) ------
-  React.useEffect(() => {
-    const url = `/api/services?t=${Date.now()}`
-    fetch(url, { cache:'no-store' })
-      .then(r => r.ok ? r.json() : [])
-      .then(list => setServices(Array.isArray(list) ? list : []))
-      .catch(() => setServices([]))
-  }, [])
+  // ====== вместимость ======
+  const DOUBLE_ROOMS = 10
+  const S = Math.max(0, Math.min(Number(singles||0), DOUBLE_ROOMS))
+  const maxAllowed = DOUBLE_ROOMS*2 - S
+  const N = Math.max(1, Math.min(Number(participants||1), maxAllowed))
+  const daysArr = useMemo(()=>Array.from({length: Math.max(1, Number(days||1))}, (_,i)=>i+1), [days])
 
-  // при изменении числа дней корректируем структуру days
-  React.useEffect(() => {
-    setItems(prev => {
-      const next = { ...prev, byDay: { ...prev.byDay } }
-      // создать недостающие
-      for (let d = 1; d <= days; d++){
-        if (!next.byDay[d]) next.byDay[d] = []
+  // каталоги по типам
+  const tourCatalog  = useMemo(()=> services.filter(x=>x.type==='PER_TOUR'), [services])
+  const dailyCatalog = useMemo(()=> services.filter(x=>x.type==='PER_PERSON' || x.type==='PER_GROUP'), [services])
+
+  // ====== манипуляции с позициями ======
+  function toggleTourItem(svc){
+    const exists = tourItems.find(x=>x.id===svc.id)
+    if(exists) setTourItems(tourItems.filter(x=>x.id!==svc.id))
+    else setTourItems([...tourItems, { id:svc.id, name_ru:svc.name_ru, price:Number(svc.price||0), repeats:1 }])
+  }
+  function setTourRepeats(id, val){
+    setTourItems(tourItems.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1))}:x))
+  }
+
+  function addDailyToDay(svc, day){
+    const d = Number(day); if(!d) return
+    const arr = dayItems[d] || []
+    if(arr.find(x=>x.id===svc.id)) return
+    const next = [...arr, { id:svc.id, name_ru:svc.name_ru, type:svc.type, price:Number(svc.price||0), repeats:1 }]
+    setDayItems({...dayItems, [d]: next})
+  }
+  function addDailyToAllDays(svc){
+    const next = {...dayItems}
+    daysArr.forEach(d=>{
+      const arr = next[d] || []
+      if(!arr.find(x=>x.id===svc.id)){
+        arr.push({ id:svc.id, name_ru:svc.name_ru, type:svc.type, price:Number(svc.price||0), repeats:1 })
       }
-      // удалить лишние
-      Object.keys(next.byDay).forEach(k => {
-        const d = Number(k)
-        if (d > days) delete next.byDay[d]
-      })
-      return next
+      next[d] = arr
     })
-  }, [days])
-
-  // если участников стало больше допустимого — обрежем
-  React.useEffect(() => {
-    if (N > maxAllowed) setN(maxAllowed)
-  }, [maxAllowed])
-
-  // ----------- добавление услуг -----------
-  function getServiceById(id){ return services.find(s => s.id === id) }
-
-  function addServiceToDay(service, day){
-    setItems(prev => {
-      const next = { ...prev, byDay: { ...prev.byDay } }
-      if (!next.byDay[day]) next.byDay[day] = []
-      next.byDay[day] = [...next.byDay[day], { id: cryptoRandom(), serviceId: service.id }]
-      return next
-    })
+    setDayItems(next)
+  }
+  function toggleItem(day, svc){
+    const arr = dayItems[day] || []
+    const exists = arr.find(x=>x.id===svc.id)
+    const next = exists ? arr.filter(x=>x.id!==svc.id)
+      : [...arr, { id:svc.id, name_ru:svc.name_ru, type:svc.type, price:Number(svc.price||0), repeats:1 }]
+    setDayItems({...dayItems, [day]: next})
+  }
+  function setRepeats(day, id, val){
+    const arr = dayItems[day] || []
+    setDayItems({...dayItems, [day]: arr.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x)})
   }
 
-  function addServiceAllDays(service){
-    setItems(prev => {
-      const next = { ...prev, byDay: { ...prev.byDay } }
-      for (let d = 1; d <= days; d++){
-        if (!next.byDay[d]) next.byDay[d] = []
-        next.byDay[d] = [...next.byDay[d], { id: cryptoRandom(), serviceId: service.id }]
-      }
-      return next
-    })
+  // ограничения по синглам/участникам
+  function onSinglesChange(v){
+    const s = Math.max(0, Math.min(Number(v||0), DOUBLE_ROOMS))
+    const nextMax = DOUBLE_ROOMS*2 - s
+    const nextN = Math.max(1, Math.min(Number(participants||1), nextMax))
+    setSingles(s)
+    setParticipants(nextN)
   }
-
-  function addServicePerTour(service){
-    setItems(prev => ({ ...prev, perTour: [...prev.perTour, { id: cryptoRandom(), serviceId: service.id }] }))
-  }
-
-  function removeItemFromDay(day, id){
-    setItems(prev => {
-      const next = { ...prev, byDay: { ...prev.byDay } }
-      next.byDay[day] = (next.byDay[day] || []).filter(x => x.id !== id)
-      return next
-    })
-  }
-
-  // ----------- калькуляция -----------
-  // базовая стоимость на 1 чел за весь тур (без агента)
-  const perPersonTotal = React.useMemo(() => {
-    const participants = Number(N || 0)
-    if (!participants) return 0
-
-    let sumDays = 0
-    for (let d = 1; d <= days; d++){
-      const dayItems = items.byDay[d] || []
-      let dayPerPerson = 0
-      let dayPerGroup  = 0
-      dayItems.forEach(it => {
-        const s = getServiceById(it.serviceId)
-        if (!s) return
-        if (s.type === TYPE_PER_PERSON) dayPerPerson += Number(s.price || 0)
-        else if (s.type === TYPE_PER_GROUP) dayPerGroup += Number(s.price || 0)
-        // TYPE_PER_TOUR игнорируем в дневной сетке
-      })
-      sumDays += dayPerPerson + (dayPerGroup / participants)
+  function onParticipantsChange(v){
+    const raw = Number(v||0)
+    if(raw > maxAllowed){
+      alert(`Макс участников: ${maxAllowed} (при ${S} single).`)
+      setParticipants(maxAllowed)
+    } else {
+      setParticipants(Math.max(1, raw))
     }
+  }
 
-    // на весь тур (единоразово): делим на N
-    const perTourSum = items.perTour.reduce((acc, it) => {
-      const s = getServiceById(it.serviceId)
-      return acc + Number(s?.price || 0)
-    }, 0)
+  // ====== расчёт ======
+  const perPersonTour = useMemo(()=>{
+    if(N<=0) return 0
+    return tourItems.reduce((sum,it)=> sum + (Number(it.price||0) * Math.max(1,Number(it.repeats||1))) / N, 0)
+  }, [tourItems, N])
 
-    return +(sumDays + (perTourSum / participants)).toFixed(2)
-  }, [items, services, days, N])
+  const dayBreakdown = useMemo(()=>{
+    return daysArr.map(d=>{
+      const items = dayItems[d]||[]
+      let perPersonDay = 0
+      items.forEach(it=>{
+        const price = Number(it.price||0)
+        const reps  = Math.max(1, Number(it.repeats||1))
+        if(it.type==='PER_PERSON'){
+          perPersonDay += price * reps
+        } else if(it.type==='PER_GROUP'){
+          if(N>0) perPersonDay += (price * reps)/N
+        }
+      })
+      return { day:d, perPersonDay, items }
+    })
+  }, [dayItems, daysArr, N])
 
-  const groupTotal = React.useMemo(
-    () => +(perPersonTotal * (Number(N) || 0)).toFixed(2),
-    [perPersonTotal, N]
+  const perPersonDaysTotal = useMemo(
+    ()=> dayBreakdown.reduce((s,d)=> s + d.perPersonDay, 0),
+    [dayBreakdown]
   )
-
-  const perPersonWithAgent = React.useMemo(
-    () => +((perPersonTotal || 0) * agentCoef).toFixed(2),
-    [perPersonTotal, agentCoef]
+  const perPersonTotal = useMemo(
+    ()=> perPersonTour + perPersonDaysTotal,
+    [perPersonTour, perPersonDaysTotal]
   )
+  const groupTotal = useMemo(()=> perPersonTotal * N, [perPersonTotal, N])
 
-  const groupTotalWithAgent = React.useMemo(
-    () => +((groupTotal || 0) * agentCoef).toFixed(2),
-    [groupTotal, agentCoef]
-  )
+  const agentReward = useMemo(()=> groupTotal * (agentPct/100), [groupTotal, agentPct])
+  const perPersonWithAgent = useMemo(()=> perPersonTotal * (1 + agentPct/100), [perPersonTotal, agentPct])
+  const groupTotalWithAgent = useMemo(()=> groupTotal * (1 + agentPct/100), [groupTotal, agentPct])
 
-  // вознаграждение агента = % от суммы без агента
-  const agentReward = React.useMemo(
-    () => +((groupTotal || 0) * (agentPct / 100)).toFixed(2),
-    [groupTotal, agentPct]
-  )
+  // ====== сохранение/открытие ======
+  function snapshot() {
+    return {
+      name: projectName || 'Без названия',
+      days, participants: N, singles: S, description,
+      tourItems, dayItems, agentPct,
+      files, // <-- прикреплённые файлы по текущему сценарию
+      created_at: new Date().toISOString()
+    }
+  }
 
+  async function saveScenario(){
+    const body = snapshot()
+    try{
+      if(!userToken && !AUTH_DISABLED){
+        saveLocal(body)
+        alert('Сценарий сохранён локально')
+        return
+      }
+      const r = await fetch('/api/scenarios', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          ...(userToken? { Authorization:'Bearer '+userToken } : {})
+        },
+        body: JSON.stringify(body)
+      })
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok) throw new Error(data.error || 'save_failed')
+      alert('Сценарий сохранён')
+    }catch(e){
+      saveLocal(body)
+      alert('Сохранил локально. Причина: '+String(e.message||e))
+    }
+  }
+
+  function saveLocal(obj){
+    const key = 'tc_scenarios'
+    const arr = JSON.parse(localStorage.getItem(key) || '[]')
+    arr.unshift({ id: 'local-'+Date.now(), ...obj })
+    localStorage.setItem(key, JSON.stringify(arr.slice(0,50)))
+  }
+
+  function resetProject(){
+    setProjectName('Новый проект')
+    setDays(1)
+    setSingles(0)
+    setParticipants(2)
+    setDescription('')
+    setTourItems([])
+    setDayItems({})
+    setFiles([])
+  }
+
+  async function openScenarioList(){
+    setOpenModal(true)
+    setLoadingOpen(true)
+    setErrorOpen('')
+    try{
+      if(userToken || AUTH_DISABLED){
+        const r = await fetch('/api/scenarios', {
+          headers: userToken? { Authorization:'Bearer '+userToken } : undefined
+        })
+        const data = await r.json().catch(()=>[])
+        if(!r.ok) throw new Error(data.error || 'load_failed')
+        setOpenList(Array.isArray(data)? data : [])
+      }else{
+        const local = JSON.parse(localStorage.getItem('tc_scenarios') || '[]')
+        setOpenList(local)
+      }
+    }catch(e){
+      setErrorOpen(String(e.message||e))
+      const local = JSON.parse(localStorage.getItem('tc_scenarios') || '[]')
+      setOpenList(local)
+    }finally{
+      setLoadingOpen(false)
+    }
+  }
+
+  function loadScenario(s){
+    try{
+      setProjectName(s.name || 'Проект')
+      setDays(Number(s.days||1))
+      setSingles(Number(s.singles||0))
+      setParticipants(Number(s.participants||2))
+      setDescription(String(s.description||''))
+      setTourItems(Array.isArray(s.tourItems)? s.tourItems : [])
+      setDayItems(s.dayItems && typeof s.dayItems==='object'? s.dayItems : {})
+      if(typeof s.agentPct!=='undefined') setAgentPct(Number(s.agentPct||0))
+      setFiles(Array.isArray(s.files)? s.files : [])
+      setOpenModal(false)
+    }catch(e){
+      alert('Не удалось открыть: '+String(e.message||e))
+    }
+  }
+
+  // ===== РЕНДЕР =====
   return (
-    <div className="page">
-      <Topbar
+    <div style={{display:'grid', gridTemplateRows:'auto 1fr', height:'100vh'}}>
+      <HeaderBar
         projectName={projectName}
         setProjectName={setProjectName}
         perPersonWithAgent={perPersonWithAgent}
         groupTotalWithAgent={groupTotalWithAgent}
         agentReward={agentReward}
         agentPct={agentPct}
+        onNew={resetProject}
+        onSave={saveScenario}
+        onOpen={openScenarioList}
       />
 
-      <div
-        className="content"
-        style={{
-          display:'grid',
-          gridTemplateColumns:'280px 1fr 340px',
-          gap:16,
-          padding:16
-        }}
-      >
-        {/* ЛЕВАЯ ПАНЕЛЬ — замороженная версия */}
+      <div style={{display:'grid', gridTemplateColumns:'1.2fr 2.4fr 1fr', height:'100%', gap:12, padding:12}}>
         <LeftCatalog
-          services={services}
-          days={days}
-          onAddDay={addServiceToDay}
-          onAddAllDays={addServiceAllDays}
-          onAddPerTour={addServicePerTour}
+          tourCatalog={tourCatalog}
+          dailyCatalog={dailyCatalog}
+          daysArr={daysArr}
+          toggleTourItem={toggleTourItem}
+          addDailyToAllDays={addDailyToAllDays}
+          addDailyToDay={addDailyToDay}
         />
 
-        {/* ЦЕНТРАЛЬНАЯ ПАНЕЛЬ — замороженная версия */}
         <CenterDays
-          items={items}
-          days={days}
-          getServiceById={getServiceById}
-          onRemove={removeItemFromDay}
+          daysArr={daysArr}
+          dayItems={dayItems}
+          setRepeats={setRepeats}
+          toggleItem={toggleItem}
+          tourItems={tourItems}
+          setTourRepeats={setTourRepeats}
+          toggleTourItem={toggleTourItem}
+          N={N}
         />
 
-        {/* ПРАВАЯ ПАНЕЛЬ — замороженная (с фиксом ввода чисел) */}
         <RightPanel
-          days={days}
-          setDays={setDays}
-          singles={singles}
-          onSinglesChange={val => setSingles(Math.max(0, Math.min(10, Number(val || 0))))}
-          N={N}
-          maxAllowed={maxAllowed}
-          onParticipantsChange={val => setN(Math.max(1, Math.min(maxAllowed, Number(val || 1))))}
-          description={description}
-          setDescription={setDescription}
+          days={days} setDays={setDays}
+          singles={singles} onSinglesChange={onSinglesChange}
+          N={N} maxAllowed={maxAllowed} onParticipantsChange={onParticipantsChange}
+          description={description} setDescription={setDescription}
           perPersonTotal={perPersonTotal}
           perPersonWithAgent={perPersonWithAgent}
           groupTotal={groupTotal}
           groupTotalWithAgent={groupTotalWithAgent}
           agentReward={agentReward}
           agentPct={agentPct}
+          // файлы
+          files={files} setFiles={setFiles}
+          userToken={userToken}
         />
       </div>
+
+      {openModal && (
+        <OpenModal
+          list={openList}
+          loading={loadingOpen}
+          error={errorOpen}
+          onClose={()=>setOpenModal(false)}
+          onOpenItem={loadScenario}
+        />
+      )}
     </div>
   )
 }
 
-// =======================================
-//               ШАПКА
-// =======================================
-function Topbar({ projectName, setProjectName, perPersonWithAgent, groupTotalWithAgent, agentReward, agentPct }){
+/** ===== КОМПОНЕНТЫ ===== */
+
+function HeaderBar({
+  projectName, setProjectName,
+  perPersonWithAgent, groupTotalWithAgent, agentReward, agentPct,
+  onNew, onSave, onOpen
+}){
+  const bg = {
+    background:
+      'linear-gradient(135deg, rgba(0,180,219,0.9), rgba(0,131,176,0.9)), url("data:image/svg+xml,%3Csvg width=\'800\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0,120 C150,180 350,60 500,120 C650,180 750,120 800,150 L800,200 L0,200 Z\' fill=\'%23ffffff22\'/%3E%3C/svg%3E")',
+    backgroundSize: 'cover',
+    color:'#fff'
+  }
   return (
-    <div style={{
-      background: 'linear-gradient(135deg, #00B4DB, #0083B0)',
-      color: '#fff',
-      padding: '12px 16px',
-      position: 'sticky',
-      top: 0,
-      zIndex: 5
-    }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap: 12, alignItems:'center' }}>
-        <div style={{ display:'flex', gap:12, alignItems:'center', minWidth:0 }}>
-          <span style={{ fontSize:18, fontWeight:800, whiteSpace:'nowrap' }}>🌴 Калькулятор эвентов и туров</span>
+    <div style={{...bg, position:'sticky', top:0, zIndex:10, borderBottom:'1px solid #e6eef6'}}>
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'1fr auto auto auto',
+        gap:12, alignItems:'center',
+        padding:'12px 16px',
+      }}>
+        <div style={{display:'flex', alignItems:'center', gap:12, minWidth:0}}>
+          <div style={{fontSize:18, fontWeight:800, whiteSpace:'nowrap'}}>
+            🌴 Калькулятор эвентов и туров
+          </div>
           <input
             value={projectName}
             onChange={e=>setProjectName(e.target.value)}
-            placeholder="Название проекта"
             style={{
-              background:'#ffffff22', color:'#fff', border:'1px solid #ffffff44',
-              borderRadius:10, padding:'6px 10px', minWidth:180, maxWidth:360, width:'100%'
+              minWidth:180, maxWidth:360, width:'100%',
+              padding:'8px 10px', border:'1px solid #ffffff44',
+              borderRadius:8, background:'#ffffff22', color:'#fff',
+              outline:'none'
             }}
+            placeholder="Название проекта"
           />
         </div>
 
-        <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-end', flexWrap:'wrap' }}>
-          <button className="primary">+ Новый</button>
-          <button className="primary">💾 Сохранить</button>
-          <button className="secondary">📂 Открыть</button>
+        <div style={{justifySelf:'end', display:'flex', gap:8, flexWrap:'wrap'}}>
+          <button onClick={onNew} style={btnWhite}>+ Новый</button>
+          <button onClick={onSave} style={btnWhite}>💾 Сохранить</button>
+          <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
+          <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
         </div>
 
-        <div style={{ textAlign:'right', fontSize:13, lineHeight:1.3 }}>
-          <div>За тур (на чел, с агентом): <b>{money(perPersonWithAgent)}</b></div>
-          <div>Итого по группе (с агентом): <b>{money(groupTotalWithAgent)}</b></div>
-          <div>Вознаграждение агента: <b>{money(agentReward)}</b> ({agentPct}%)</div>
+        <div style={{justifySelf:'end', fontSize:12, lineHeight:1.2, textAlign:'right', opacity:.95}}>
+          <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
+          <div>Итого по группе (с агентом): <b>{groupTotalWithAgent.toFixed(2)}</b></div>
+          <div>Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
         </div>
       </div>
     </div>
   )
 }
 
-// =======================================
-//           ЛЕВАЯ ПАНЕЛЬ (заморожено)
-// =======================================
-function LeftCatalog({ services, days, onAddDay, onAddAllDays, onAddPerTour }){
-  const perTour = services.filter(s => s.type === TYPE_PER_TOUR)
-  const daily   = services.filter(s => s.type !== TYPE_PER_TOUR)
-
+function LeftCatalog({ tourCatalog, dailyCatalog, daysArr, toggleTourItem, addDailyToAllDays, addDailyToDay }){
   return (
-    <div style={{ position:'sticky', top:84, alignSelf:'start' }}>
+    <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
       <div style={card}>
-        <h4 style={{ marginTop:0 }}>Каталог услуг</h4>
+        <h4 style={{marginTop:0, marginBottom:8}}>Каталог услуг</h4>
 
-        {perTour.length > 0 && (
-          <>
-            <div style={{ opacity:.7, fontSize:12, margin:'8px 0' }}>На весь тур</div>
-            <div style={{ display:'grid', gap:10 }}>
-              {perTour.map(s => (
-                <ServiceRow key={s.id} service={s}
-                  days={days}
-                  mode="per_tour"
-                  onAddDay={onAddDay}
-                  onAddAllDays={onAddAllDays}
-                  onAddPerTour={onAddPerTour}
-                />
-              ))}
+        <div style={{fontSize:12, opacity:.7, marginTop:12, marginBottom:6}}>На весь тур</div>
+        <div style={{display:'grid', gap:8}}>
+          {tourCatalog.map(svc=>(
+            <div key={'t_'+svc.id} style={svcCard}>
+              <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
+                <div style={{fontWeight:600}}>{svc.name_ru}</div>
+                <div style={priceBadge}>{Number(svc.price||0).toFixed(0)}</div>
+              </div>
+              <div style={{display:'flex', gap:8}}>
+                <button className="btn-sm" onClick={()=>toggleTourItem(svc)}>
+                  Добавить/убрать
+                </button>
+              </div>
             </div>
-            <hr style={{ margin:'12px 0' }}/>
-          </>
-        )}
+          ))}
+        </div>
 
-        <div style={{ opacity:.7, fontSize:12, margin:'8px 0' }}>Ежедневные</div>
-        <div style={{ display:'grid', gap:10 }}>
-          {daily.map(s => (
-            <ServiceRow key={s.id} service={s}
-              days={days}
-              mode="daily"
-              onAddDay={onAddDay}
-              onAddAllDays={onAddAllDays}
-              onAddPerTour={onAddPerTour}
+        <div style={{fontSize:12, opacity:.7, marginTop:16, marginBottom:6}}>Ежедневные</div>
+        <div style={{display:'grid', gap:8}}>
+          {dailyCatalog.map(svc=>(
+            <ServicePickerCard
+              key={'d_'+svc.id}
+              svc={svc}
+              daysArr={daysArr}
+              onSelect={(opt)=>{
+                if(opt==='ALL') addDailyToAllDays(svc)
+                else addDailyToDay(svc, opt)
+              }}
             />
           ))}
         </div>
@@ -339,188 +409,238 @@ function LeftCatalog({ services, days, onAddDay, onAddAllDays, onAddPerTour }){
   )
 }
 
-function ServiceRow({ service, days, mode, onAddDay, onAddAllDays, onAddPerTour }){
-  const [dayPick, setDayPick] = React.useState('all')
-  const dayOptions = Array.from({length:days}, (_,i)=> i+1 )
-
+function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setTourRepeats, toggleTourItem, N }){
   return (
-    <div style={{
-      border:'1px solid #e7eef6', borderRadius:10, padding:10,
-      display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, alignItems:'center'
-    }}>
-      <div>
-        <div style={{ fontWeight:600 }}>{service.name_ru}</div>
-        <div style={{ opacity:.6, fontSize:12 }}>
-          {service.type === TYPE_PER_PERSON && 'за человека (в день)'}
-          {service.type === TYPE_PER_GROUP  && 'за группу (в день)'}
-          {service.type === TYPE_PER_TOUR   && 'за группу (на весь тур)'}
-        </div>
-      </div>
-
-      {mode === 'daily' ? (
-        <>
-          <select value={dayPick} onChange={e=>setDayPick(e.target.value)} style={{ height:36 }}>
-            <option value="all">— выбрать день —</option>
-            {dayOptions.map(d => <option key={d} value={String(d)}>День {d}</option>)}
-            <option value="*">все дни</option>
-          </select>
-          <button className="primary"
-            onClick={()=>{
-              if (dayPick === '*') onAddAllDays(service)
-              else {
-                const d = Number(dayPick)
-                if (d >=1 && d <= days) onAddDay(service, d)
-              }
-            }}
-          >
-            Добавить
-          </button>
-        </>
-      ) : (
-        <>
-          <div />
-          <button className="primary" onClick={()=>onAddPerTour(service)}>Добавить</button>
-        </>
-      )}
-    </div>
-  )
-}
-
-// =======================================
-//        ЦЕНТРАЛЬНАЯ ПАНЕЛЬ (заморожено)
-// =======================================
-function CenterDays({ items, days, getServiceById, onRemove }){
-  return (
-    <div style={{ overflow:'auto' }}>
-      {Array.from({length:days}, (_,i)=> i+1).map(d => {
-        const list = items.byDay[d] || []
-        return (
-          <div key={d} style={{ ...card, marginBottom:12 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <h4 style={{ margin:0 }}>День {d}</h4>
+    <div style={{overflow:'auto'}}>
+      <div style={{display:'grid', gap:12}}>
+        {daysArr.map(d=>(
+          <div key={d} style={card}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+              <h4 style={{margin:0}}>День {d}</h4>
+              <span style={{fontSize:12, opacity:.7}}>
+                На чел/день: <b>{(dayItems[d]||[]).reduce((acc,it)=>{
+                  const price = Number(it.price||0); const reps = Math.max(1, Number(it.repeats||1))
+                  if(it.type==='PER_PERSON') return acc + price*reps
+                  if(it.type==='PER_GROUP')   return acc + (N>0 ? (price*reps)/N : 0)
+                  return acc
+                },0).toFixed(2)}</b>
+              </span>
             </div>
 
-            {list.length === 0 && (
-              <div style={{ opacity:.6, fontSize:14, padding:'8px 0' }}>Нет услуг</div>
-            )}
-
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:8 }}>
-              {list.map(it => {
-                const s = getServiceById(it.serviceId)
-                if (!s) return null
-                return (
-                  <div key={it.id} style={{
-                    display:'flex', alignItems:'center', gap:8,
-                    border:'1px solid #e7eef6', borderRadius:999, padding:'6px 10px', background:'#f8fbfe'
-                  }}>
-                    <span>{s.name_ru}</span>
-                    <button className="secondary btn-sm" onClick={()=>onRemove(d, it.id)}>убрать</button>
-                  </div>
-                )
-              })}
+            <div style={{display:'grid', gap:8}}>
+              {(dayItems[d]||[]).map(it=>(
+                <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
+                  <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>({it.type==='PER_PERSON'?'на чел':'на группу'})</span></div>
+                  <input type="number" value={it.repeats} onChange={e=>setRepeats(d, it.id, e.target.value)} />
+                  <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
+                  <button className="secondary btn-sm" onClick={()=>toggleItem(d, it)}>убрать</button>
+                </div>
+              ))}
             </div>
           </div>
-        )
-      })}
+        ))}
+
+        {tourItems.length>0 && (
+          <div style={card}>
+            <h4 style={{marginTop:0}}>Услуги на весь тур</h4>
+            <div style={{display:'grid', gap:8}}>
+              {tourItems.map(it=>(
+                <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
+                  <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>(на тур)</span></div>
+                  <input type="number" value={it.repeats} onChange={e=>setTourRepeats(it.id, e.target.value)}/>
+                  <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
+                  <button className="secondary btn-sm" onClick={()=>toggleTourItem({id:it.id})}>убрать</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-// =======================================
-//     ПРАВАЯ ПАНЕЛЬ (заморожено + ввод)
-// =======================================
 function RightPanel({
   days, setDays,
   singles, onSinglesChange,
   N, maxAllowed, onParticipantsChange,
   description, setDescription,
-  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
+  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct,
+  // файлы
+  files, setFiles, userToken
 }){
-  // локальные строки для ввода (можно стереть и набрать заново)
-  const [daysInput, setDaysInput] = React.useState(String(days || 1))
-  const [participantsInput, setParticipantsInput] = React.useState(String(N || 1))
+  async function onSelectFiles(e){
+    const list = Array.from(e.target.files||[])
+    if(!list.length) return
 
-  React.useEffect(() => { setDaysInput(String(days || 1)) }, [days])
-  React.useEffect(() => { setParticipantsInput(String(N || 1)) }, [N])
-
-  React.useEffect(() => {
-    if (maxAllowed && N > maxAllowed) {
-      onParticipantsChange(maxAllowed)
-      setParticipantsInput(String(maxAllowed))
+    // проверяем размер
+    const overs = list.filter(f => f.size > MAX_FILE_MB*1024*1024)
+    if(overs.length){
+      alert(`Файл(ы) превышают ${MAX_FILE_MB} МБ: ${overs.map(f=>f.name).join(', ')}`)
+      return
     }
-  }, [maxAllowed])
 
-  function commitDays() {
-    let v = parseInt((daysInput || '').replace(/\D/g, ''), 10)
-    if (isNaN(v)) v = 1
-    v = Math.max(1, Math.min(60, v))
-    setDays(v)
-    setDaysInput(String(v))
+    // грузим по одному
+    const uploaded = []
+    for (const f of list){
+      try{
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch('/api/upload', {
+          method:'POST',
+          headers: userToken ? { Authorization: 'Bearer '+userToken } : undefined,
+          body: fd
+        })
+        const data = await r.json()
+        if(!r.ok) throw new Error(data.error || 'upload_failed')
+        // ожидаем, что вернёт { url } или { publicUrl }
+        uploaded.push({ name: f.name, size: f.size, url: data.url || data.publicUrl || '' })
+      }catch(err){
+        alert(`Не удалось загрузить ${f.name}: ${String(err.message||err)}`)
+      }
+    }
+    if(uploaded.length){
+      setFiles([ ...uploaded, ...files ])
+    }
+    // очистим инпут
+    e.target.value = ''
   }
 
-  function commitParticipants() {
-    let v = parseInt((participantsInput || '').replace(/\D/g, ''), 10)
-    if (isNaN(v)) v = 1
-    const max = Math.max(1, Number(maxAllowed || 1))
-    v = Math.max(1, Math.min(max, v))
-    onParticipantsChange(v)
-    setParticipantsInput(String(v))
+  function removeFile(url){
+    setFiles(files.filter(x=>x.url!==url))
   }
 
   return (
-    <div>
+    <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
       <div style={card}>
         <h4 style={{marginTop:0}}>Параметры тура</h4>
-
         <div style={{display:'grid', gap:8}}>
           <label>Дней
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Введите число"
-              value={daysInput}
-              onChange={e=>setDaysInput(e.target.value)}
-              onBlur={commitDays}
-              onKeyDown={e=>{ if(e.key==='Enter') commitDays() }}
-            />
+            <input type="number" min="1" value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value||1)))} />
           </label>
-
           <label>Singles (одноместных)
-            <input type="number" min="0" max="10" value={singles} onChange={e=>onSinglesChange(e.target.value)} />
+            <input type="number" min="0" max={10} value={singles} onChange={e=>onSinglesChange(e.target.value)} />
           </label>
-
           <label>Участников (макс {maxAllowed})
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder={`1–${maxAllowed}`}
-              value={participantsInput}
-              onChange={e=>setParticipantsInput(e.target.value)}
-              onBlur={commitParticipants}
-              onKeyDown={e=>{ if(e.key==='Enter') commitParticipants() }}
-            />
+            <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
           </label>
 
           <label>Описание
-            <textarea
-              rows={4}
-              value={description}
-              onChange={e=>setDescription(e.target.value)}
-              placeholder="Свободный текст: заметки, список участников, детали..."
-            />
+            <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Свободный текст: заметки, список участников, детали..." />
           </label>
+
+          <div>
+            <div style={{fontWeight:600, margin:'6px 0 6px'}}>Файлы (до {MAX_FILE_MB} МБ/файл)</div>
+            <input type="file" multiple onChange={onSelectFiles} />
+            {files.length>0 && (
+              <div style={{marginTop:8, display:'grid', gap:6}}>
+                {files.map(f=>(
+                  <div key={f.url || f.name} style={{display:'grid', gridTemplateColumns:'1fr auto', gap:8, alignItems:'center'}}>
+                    <a href={f.url || '#'} target="_blank" rel="noreferrer" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                      {f.name} <span style={{opacity:.6}}>({(f.size/1024/1024).toFixed(2)} МБ)</span>
+                    </a>
+                    <button className="secondary btn-sm" onClick={()=>removeFile(f.url)}>Удалить</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <hr style={{margin:'12px 0'}} />
 
         <div style={{display:'grid', gap:6, fontSize:14}}>
-          <div>За тур (на чел, без агента): <b>{money(perPersonTotal)}</b></div>
-          <div>За тур (на чел, с агентом): <b>{money(perPersonWithAgent)}</b></div>
-          <div>Итого по группе (без агента): <b>{money(groupTotal)}</b></div>
-          <div>Итого по группе (с агентом): <b>{money(groupTotalWithAgent)}</b></div>
-          <div>Вознаграждение агента: <b>{money(agentReward)}</b> ({agentPct}%)</div>
+          <div>За тур (на чел, без агента): <b>{perPersonTotal.toFixed(2)}</b></div>
+          <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
+          <div>Итого по группе (без агента): <b>{groupTotal.toFixed(2)}</b></div>
+          <div>Итого по группе (с агентом): <b>{groupTotalWithAgent.toFixed(2)}</b></div>
+          <div>Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
         </div>
       </div>
     </div>
   )
+}
+
+function ServicePickerCard({ svc, daysArr, onSelect }){
+  const [choice, setChoice] = useState('') // '', 'ALL' или число-дня
+  function apply(){
+    if(choice==='ALL') onSelect('ALL')
+    else if(choice) onSelect(Number(choice))
+  }
+  return (
+    <div style={svcCard}>
+      <div style={{display:'flex', justifyContent:'space-between', gap:8, marginBottom:6}}>
+        <div style={{fontWeight:600}}>{svc.name_ru}</div>
+        <div style={priceBadge}>{Number(svc.price||0).toFixed(0)}</div>
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:8}}>
+        <select value={choice} onChange={e=>setChoice(e.target.value)} style={{...input}}>
+          <option value="">— выбрать дни —</option>
+          <option value="ALL">Все дни</option>
+          {daysArr.map(d=> <option key={d} value={d}>День {d}</option>)}
+        </select>
+        <button className="btn-sm" onClick={apply} disabled={!choice}>Добавить</button>
+      </div>
+      <div style={{fontSize:12, opacity:.6, marginTop:4}}>
+        {svc.type==='PER_PERSON' ? 'за человека (в день)' : 'за группу (в день)'}
+      </div>
+    </div>
+  )
+}
+
+/** ===== МОДАЛКА ОТКРЫТИЯ ===== */
+function OpenModal({ list, loading, error, onClose, onOpenItem }){
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div style={modalCard} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+          <h3 style={{margin:0}}>Открыть сохранённый проект</h3>
+          <button className="secondary btn-sm" onClick={onClose}>✕</button>
+        </div>
+        {loading && <div style={{opacity:.7}}>Загрузка…</div>}
+        {error && <div style={{color:'#b00020'}}>Ошибка: {error}</div>}
+        {!loading && list.length===0 && <div style={{opacity:.7}}>Пока ничего нет</div>}
+
+        <div style={{display:'grid', gap:8, marginTop:8, maxHeight:360, overflow:'auto'}}>
+          {list.map(item=>(
+            <button key={item.id} style={openRow} onClick={()=>onOpenItem(item)}>
+              <div style={{fontWeight:600, textAlign:'left'}}>{item.name || 'Без названия'}</div>
+              <div style={{opacity:.6, fontSize:12}}>
+                {item.created_at? new Date(item.created_at).toLocaleString() : ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ——— стили ——— */
+const card = { background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12 }
+const svcCard = { background:'#f8fbff', border:'1px solid #e6eef6', borderRadius:10, padding:10 }
+const priceBadge = { padding:'2px 8px', borderRadius:999, background:'#e8f4ff', border:'1px solid #cfe7ff', fontSize:12 }
+const input = { width:'100%', padding:'8px 10px', border:'1px solid #d7e1eb', borderRadius:8, outline:'none' }
+const btnWhite = {
+  padding:'8px 12px',
+  border:'1px solid #ffffffaa',
+  background:'#ffffff22',
+  backdropFilter:'blur(2px)',
+  color:'#fff',
+  borderRadius:10,
+  cursor:'pointer'
+}
+const modalWrap = {
+  position:'fixed', inset:0, background:'rgba(0,0,0,.35)',
+  display:'grid', placeItems:'center', zIndex:50
+}
+const modalCard = {
+  width:'min(720px, 92vw)', background:'#fff', borderRadius:12,
+  padding:14, boxShadow:'0 10px 30px rgba(0,0,0,.15)'
+}
+const openRow = {
+  display:'grid', gridTemplateColumns:'1fr auto', gap:8,
+  padding:'10px 12px', border:'1px solid #e6eef6', borderRadius:10,
+  background:'#fafcff', cursor:'pointer', textAlign:'left',
+  color:'#222' // чтобы текст точно читался на светлом фоне
 }
