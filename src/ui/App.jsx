@@ -265,7 +265,7 @@ export default function App(){
 </div>
 
       {/* Контент: левый каталог | центр | правые параметры */}
-      <div className="grid">
+     <div className="content">
         {/* ЛЕВАЯ ПАНЕЛЬ */}
         <aside className="sidebar-left">
           <div className="card" style={{marginBottom:16}}>
