@@ -6,7 +6,7 @@ export default function App(){
   const nav = useNavigate()
   const { userToken, isAdmin } = useAuth()
 
-  // состояние (логика расчёта не трогаем)
+  // состояние (логику расчётов не трогаем)
   const [scenario,setScenario] = useState({ id:null, name:'Мой тур', days:1, participants:2, singles:0, description:'' })
   const [services,setServices] = useState([])
   const [tourItems,setTourItems] = useState([])
@@ -16,13 +16,18 @@ export default function App(){
   const [list,setList] = useState([])
   const [saving,setSaving] = useState(false)
 
+  // защита: только пользователь
   useEffect(()=>{
     if (!userToken) { nav('/login') }
     if (isAdmin) { alert('Калькулятор доступен только пользователям'); nav('/login') }
   }, [userToken, isAdmin, nav])
 
-  useEffect(()=>{ fetch('/api/services').then(r=>r.json()).then(setServices) },[])
+  // справочник услуг
+  useEffect(()=>{
+    fetch('/api/services').then(r=>r.json()).then(setServices)
+  },[])
 
+  // параметры вместимости
   const DOUBLE_ROOMS = 10
   const N = Number(scenario.participants || 0)
   const S = Number(scenario.singles || 0)
@@ -30,12 +35,13 @@ export default function App(){
   const maxAllowed = DOUBLE_ROOMS * 2 - S_EFF
   const days = Array.from({length: Math.max(1, Number(scenario.days||1))}, (_,i)=>i+1)
 
-  // параметры
+  // хендлеры параметров
   function handleParticipantsChange(e){
     const raw = Number(e.target.value || 0)
     if (raw > maxAllowed){
       alert(`Слишком много участников: максимум ${maxAllowed} при ${S_EFF} single.`)
-      setScenario(prev => ({...prev, participants: maxAllowed})); return
+      setScenario(prev => ({...prev, participants: maxAllowed}))
+      return
     }
     setScenario(prev => ({...prev, participants: Math.max(1, raw)}))
   }
@@ -77,7 +83,7 @@ export default function App(){
     const next = [...arr, { id:service.id, service_id:service.id, name_ru:service.name_ru, type:service.type, price:Number(service.price), repeats:1 }]
     setDayItems({...dayItems, [d]: next})
   }
-  // НОВОЕ: добавить дневную услугу во ВСЕ дни
+  // добавить дневную услугу во все дни
   function addDailyToAllDays(service){
     const next = {...dayItems}
     days.forEach(d=>{
@@ -101,7 +107,7 @@ export default function App(){
     setDayItems({...dayItems, [day]: arr.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x )})
   }
 
-  // расчёты
+  // расчёт
   const perPersonTour = tourItems.reduce((sum, it)=>{
     if(N>0) return sum + (Number(it.price) * (it.repeats||1))/N
     return sum
@@ -120,7 +126,7 @@ export default function App(){
   const perPersonTotal = perPersonTour + perPersonTotalDays
   const groupTotal = perPersonTotal * N
 
-  // prepare payload
+  // payload
   function buildItemsPayload(){
     const itemsTour = tourItems.map(it => ({
       day: null, service_id: it.service_id, type: it.type, price: Number(it.price), repeats: Number(it.repeats||1)
@@ -133,7 +139,7 @@ export default function App(){
     return [...itemsTour, ...itemsDays]
   }
 
-  // Сохранение (починил кнопку + защита от даблклика)
+  // сохранение
   async function saveScenario(){
     if(saving) return
     if(!userToken){ alert('Войдите как пользователь'); return }
@@ -164,13 +170,13 @@ export default function App(){
     }
   }
 
+  // диалог «открыть»
   async function openDialog(){
     setModalOpen(true)
     const r = await fetch('/api/scenarios', { headers: { Authorization:'Bearer '+userToken } })
     const data = await r.json()
     if(r.ok) setList(data)
   }
-
   async function loadScenario(id){
     const r = await fetch('/api/scenarios?id='+id, { headers:{ Authorization:'Bearer '+userToken } })
     const data = await r.json()
@@ -193,7 +199,6 @@ export default function App(){
     setFiles(data.files||[])
     setModalOpen(false)
   }
-
   async function deleteScenario(id){
     if(!confirm('Удалить сценарий?')) return
     const r = await fetch('/api/scenarios?id='+id, { method:'DELETE', headers:{ Authorization:'Bearer '+userToken } })
@@ -208,7 +213,6 @@ export default function App(){
       const t = await r.json().catch(()=>({})); alert('Ошибка удаления: ' + (t.error || r.status))
     }
   }
-
   async function onFileSelected(e){
     const file = e.target.files?.[0]
     if(!file){ return }
@@ -234,39 +238,38 @@ export default function App(){
 
   return (
     <div className="shell">
-     {/* Шапка с итогами (адаптивная) */}
-       <div className="topbar">
-          <div className="top-title">
-    <h2>Калькулятор туров</h2>
-         </div>
-  <div className="top-actions">
-    <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
-    <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
-    <span className="pill">На группу: <b>{groupTotal.toFixed(2)}</b></span>
+      {/* Шапка с итогами (адаптивная, Safari-friendly) */}
+      <div className="topbar">
+        <div className="top-title">
+          <h2>Калькулятор туров</h2>
+        </div>
+        <div className="top-actions">
+          <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
+          <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
+          <span className="pill">На группу: <b>{groupTotal.toFixed(2)}</b></span>
 
-    <button
-      className="secondary btn-sm"
-      onClick={()=>{
-        setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' })
-        setTourItems([]); setDayItems({}); setFiles([])
-      }}
-    >
-      ＋ Новый
-    </button>
+          <button
+            className="secondary btn-sm"
+            onClick={()=>{
+              setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' })
+              setTourItems([]); setDayItems({}); setFiles([])
+            }}
+          >
+            ＋ Новый
+          </button>
 
-    <button className="btn-sm" onClick={saveScenario} disabled={saving}>
-      {saving ? 'Сохраняю…' : '💾 Сохранить'}
-    </button>
+          <button className="btn-sm" onClick={saveScenario} disabled={saving}>
+            {saving ? 'Сохраняю…' : '💾 Сохранить'}
+          </button>
 
-    <button className="secondary btn-sm" onClick={openDialog}>📂 Открыть</button>
-    <Link to="/admin/login" className="small" style={{alignSelf:'center'}}>Админ →</Link>
-  </div>
+          <button className="secondary btn-sm" onClick={openDialog}>📂 Открыть</button>
+          <Link to="/admin/login" className="small" style={{alignSelf:'center'}}>Админ →</Link>
+        </div>
       </div>
-</div>
 
       {/* Контент: левый каталог | центр | правые параметры */}
-     <div className="content">
-        {/* ЛЕВАЯ ПАНЕЛЬ */}
+      <div className="content">
+        {/* ЛЕВАЯ ПАНЕЛЬ (каталог услуг) */}
         <aside className="sidebar-left">
           <div className="card" style={{marginBottom:16}}>
             <h3 style={{margin:'0 0 8px'}}>Услуги на весь тур</h3>
@@ -285,7 +288,9 @@ export default function App(){
                     {tourItems.map(it=>(
                       <tr key={it.id}>
                         <td data-label="Услуга">{it.name_ru || it.service_id}</td>
-                        <td data-label="Повторы"><input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} /></td>
+                        <td data-label="Повторы">
+                          <input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -320,7 +325,7 @@ export default function App(){
           </div>
         </aside>
 
-        {/* ЦЕНТР — ТЕПЕРЬ СКРОЛЛИТСЯ */}
+        {/* ЦЕНТР (скроллится) */}
         <main className="center">
           <div className="card">
             <h3>Выбранные услуги по дням</h3>
@@ -370,7 +375,7 @@ export default function App(){
           </div>
         </main>
 
-        {/* ПРАВАЯ ПАНЕЛЬ — ПАРАМЕТРЫ */}
+        {/* ПРАВАЯ ПАНЕЛЬ (параметры тура) */}
         <aside className="sidebar-right">
           <div className="card" style={{marginBottom:16}}>
             <h3 style={{margin:'0 0 8px'}}>Параметры тура</h3>
