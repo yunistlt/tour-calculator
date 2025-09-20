@@ -3,29 +3,32 @@ import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
 export default function Login() {
+  const nav = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const nav = useNavigate()
 
-  async function handleLogin(e) {
+  async function handleLogin(e){
     e.preventDefault()
     setError('')
     setLoading(true)
-    try {
+    try{
       const r = await fetch('/api/user-login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ username: username.trim(), password })
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.error || 'Ошибка входа')
+      if(!r.ok){
+        // покажем точный код из шага 1
+        throw new Error(data.error || 'login_failed')
+      }
       localStorage.setItem('userToken', data.token)
       nav('/')
-    } catch (err) {
+    }catch(err){
       setError(err.message)
-    } finally {
+    }finally{
       setLoading(false)
     }
   }
@@ -33,13 +36,13 @@ export default function Login() {
   return (
     <div className="auth-page">
       <h2>Вход</h2>
-      <form onSubmit={handleLogin} style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
-        <input placeholder="Логин" value={username} onChange={e => setUsername(e.target.value)} />
-        <input type="password" placeholder="Пароль" value={password} onChange={e => setPassword(e.target.value)} />
-        {error && <div style={{ color: 'red', fontSize: 12 }}>{error}</div>}
-        <button type="submit" disabled={loading}>{loading ? 'Вхожу...' : 'Войти'}</button>
+      <form onSubmit={handleLogin} style={{display:'grid', gap:12, maxWidth:320}}>
+        <input placeholder="Логин" value={username} onChange={e=>setUsername(e.target.value)} />
+        <input type="password" placeholder="Пароль" value={password} onChange={e=>setPassword(e.target.value)} />
+        {error && <div style={{color:'red', fontSize:12}}>{error}</div>}
+        <button type="submit" disabled={loading}>{loading ? 'Вхожу…' : 'Войти'}</button>
       </form>
-      <div style={{ marginTop: 8 }}>
+      <div style={{marginTop:8}}>
         Нет аккаунта? <Link to="/register">Регистрация</Link>
       </div>
     </div>
