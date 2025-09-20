@@ -1,42 +1,45 @@
 // netlify/functions/user-login.js
-import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { supabase } from './_common.js'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+export async function handler(event) {
+  try {
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
+    }
 
-const json = (code, body) => ({
-  statusCode: code,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-})
+    const { username, password } = JSON.parse(event.body || '{}')
+    if (!username || !password) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'username/password required' }) }
+    }
 
-export async function handler(event){
-  if(event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' })
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single()
 
-  let body
-  try { body = JSON.parse(event.body || '{}') } catch { return json(400, { error: 'Bad JSON' }) }
-  const username = (body.username || '').trim()
-  const password = String(body.password || '')
-  if(!username || !password) return json(400, { error: 'username/password required' })
+    if (error || !user) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Invalid username or password' }) }
+    }
 
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('id, username, password')
-    .eq('username', username)
-    .single()
+    const match = await bcrypt.compare(password, user.password)
+    if (!match) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Invalid username or password' }) }
+    }
 
-  if(error || !user) return json(401, { error: 'Invalid credentials' })
+    const token = jwt.sign(
+      { sub: user.id, username, role: 'USER' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    )
 
-  const ok = await bcrypt.compare(password, user.password)
-  if(!ok) return json(401, { error: 'Invalid credentials' })
-
-  // ВАЖНО: единый формат токена
-  const token = jwt.sign(
-    { sub: user.id, role: 'USER', username: user.username },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' }
-  )
-
-  return json(200, { token })
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ token, user: { id: user.id, username } })
+    }
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) }
+  }
 }
