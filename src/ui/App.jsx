@@ -523,29 +523,74 @@ function RightPanel({
   N, maxAllowed, onParticipantsChange,
   description, setDescription,
   perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
-}){
+}) {
+  // локальная строка для ввода дней: можно стереть и ввести новое число
+  const [daysInput, setDaysInput] = React.useState(String(days || 1))
+
+  // если снаружи days изменится — синхронизируем поле
+  React.useEffect(() => {
+    setDaysInput(String(days || 1))
+  }, [days])
+
+  function commitDays() {
+    // берём только цифры, клампим 1..60
+    let v = parseInt((daysInput || '').replace(/\D/g, ''), 10)
+    if (isNaN(v)) v = 1
+    v = Math.max(1, Math.min(60, v))
+    setDays(v)
+    setDaysInput(String(v))
+  }
+
   return (
     <div>
       <div style={card}>
-        <h4 style={{marginTop:0}}>Параметры тура</h4>
-        <div style={{display:'grid', gap:8}}>
+        <h4 style={{ marginTop: 0 }}>Параметры тура</h4>
+
+        <div style={{ display: 'grid', gap: 8 }}>
           <label>Дней
-            <input type="number" min="1" value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value||1)))} />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Введите число"
+              value={daysInput}
+              onChange={e => setDaysInput(e.target.value)}
+              onBlur={commitDays}
+              onKeyDown={e => { if (e.key === 'Enter') commitDays() }}
+            />
           </label>
+
           <label>Singles (одноместных)
-            <input type="number" min="0" max={10} value={singles} onChange={e=>onSinglesChange(e.target.value)} />
+            <input
+              type="number"
+              min="0"
+              max="10"
+              value={singles}
+              onChange={e => onSinglesChange(e.target.value)}
+            />
           </label>
+
           <label>Участников (макс {maxAllowed})
-            <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
+            <input
+              type="number"
+              min="1"
+              value={N}
+              onChange={e => onParticipantsChange(e.target.value)}
+            />
           </label>
+
           <label>Описание
-            <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Свободный текст: заметки, список участников, детали..." />
+            <textarea
+              rows={4}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Свободный текст: заметки, список участников, детали..."
+            />
           </label>
         </div>
 
-        <hr style={{margin:'12px 0'}} />
+        <hr style={{ margin: '12px 0' }} />
 
-        <div style={{display:'grid', gap:6, fontSize:14}}>
+        <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
           <div>За тур (на чел, без агента): <b>{perPersonTotal.toFixed(2)}</b></div>
           <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
           <div>Итого по группе (без агента): <b>{groupTotal.toFixed(2)}</b></div>
@@ -556,7 +601,6 @@ function RightPanel({
     </div>
   )
 }
-
 function ServicePickerCard({ svc, daysArr, onSelect }){
   const [choice, setChoice] = useState('') // '', 'ALL' или число-дня
   function apply(){
