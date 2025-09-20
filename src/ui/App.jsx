@@ -2,7 +2,7 @@
 import React from 'react'
 import { useAuth } from './store'
 
-// -------------------- утилиты --------------------
+// ---------- константы/утилиты ----------
 const card = {
   background: '#fff',
   border: '1px solid #e7eef6',
@@ -10,73 +10,86 @@ const card = {
   padding: 16,
 }
 
-// типы услуг
-const TYPE_PER_PERSON = 'PER_PERSON'
-const TYPE_PER_GROUP  = 'PER_GROUP'
-const TYPE_PER_TOUR   = 'PER_TOUR' // на весь тур (единоразово)
+const TYPE_PER_PERSON = 'PER_PERSON'  // за человека (в день)
+const TYPE_PER_GROUP  = 'PER_GROUP'   // за группу (в день)
+const TYPE_PER_TOUR   = 'PER_TOUR'    // за группу (на весь тур)
 
-// красивое число
 const money = (x) => Number(x || 0).toFixed(2)
 
-// -------------------- Корневой компонент --------------------
-export default function App(){
-  const { userToken, user } = useAuth()
+function cryptoRandom(){
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
 
-  // -------- состояние шапки/имени проекта --------
+// =======================================
+//                APP
+// =======================================
+export default function App(){
+  const { user } = useAuth()
+
+  // имя проекта в шапке
   const [projectName, setProjectName] = React.useState('Новый проект')
 
-  // -------- настройки (процент агента) --------
+  // глобальные настройки (наценка агента)
   const [settings, setSettings] = React.useState({ agent_markup_percent: 0 })
   const agentPct  = Number(settings?.agent_markup_percent ?? 0)
   const agentCoef = React.useMemo(() => 1 + agentPct/100, [agentPct])
 
-  // -------- каталог услуг --------
+  // каталог услуг
   const [services, setServices] = React.useState([])
 
-  // -------- параметры тура --------
+  // параметры тура
   const [days, setDays] = React.useState(1)
-  const [singles, setSingles] = React.useState(0)   // одноместные
-  // вместимость: 10 двухместных номеров => 20 - singles
+  const [singles, setSingles] = React.useState(0) // одноместные размещения
+  // максимум участников: 10 двухместных номеров = 20 мест, минус синглы
   const maxAllowed = React.useMemo(() => Math.max(1, 20 - Number(singles || 0)), [singles])
-  const [N, setN] = React.useState(2)               // участников
+  const [N, setN] = React.useState(2)
   const [description, setDescription] = React.useState('')
 
-  // -------- выбранные услуги --------
-  // структура: { byDay: {1:[{id,serviceId}], 2:[...]}, perTour:[{id,serviceId}] }
+  // выбранные услуги
   const [items, setItems] = React.useState({
-    byDay: { 1: [] },
-    perTour: [],
+    byDay: { 1: [] },  // { [day]: [{id, serviceId}] }
+    perTour: [],       // [{id, serviceId}]
   })
 
-  // --- загрузка настроек (без кэша) ---
+  // ------ загрузка настроек (байпас кэша, чтобы не залипало 25%) ------
   React.useEffect(() => {
-    const url = `/api/public-settings?t=${Date.now()}`
-    fetch(url, { cache: 'no-store' })
-      .then(r => r.json())
-      .then(d => {
-        setSettings({ agent_markup_percent: Number(d?.agent_markup_percent ?? 0) })
-      })
-      .catch(() => setSettings({ agent_markup_percent: 0 }))
+    let alive = true
+    async function fetchSettings(){
+      try{
+        const r = await fetch(`/api/public-settings?t=${Date.now()}`, { cache:'no-store' })
+        const d = await r.json()
+        const pct = Number(d?.agent_markup_percent ?? 0)
+        if (alive) setSettings({ agent_markup_percent: pct })
+      }catch{
+        if (alive) setSettings({ agent_markup_percent: 0 })
+      }
+    }
+    fetchSettings()
+    const onVis = () => { if (!document.hidden) fetchSettings() }
+    document.addEventListener('visibilitychange', onVis)
+    const timer = setInterval(fetchSettings, 20000)
+    return () => { alive=false; document.removeEventListener('visibilitychange', onVis); clearInterval(timer) }
   }, [])
 
-  // --- загрузка каталога услуг (без кэша) ---
+  // ------ загрузка каталога услуг (без кэша) ------
   React.useEffect(() => {
     const url = `/api/services?t=${Date.now()}`
-    fetch(url, { cache: 'no-store' })
+    fetch(url, { cache:'no-store' })
       .then(r => r.ok ? r.json() : [])
       .then(list => setServices(Array.isArray(list) ? list : []))
       .catch(() => setServices([]))
   }, [])
 
-  // если изменилось количество дней — подгоняем структуру по дням
+  // при изменении числа дней корректируем структуру days
   React.useEffect(() => {
     setItems(prev => {
       const next = { ...prev, byDay: { ...prev.byDay } }
-      // создать недостающие дни
-      for (let d = 1; d <= days; d++) {
+      // создать недостающие
+      for (let d = 1; d <= days; d++){
         if (!next.byDay[d]) next.byDay[d] = []
       }
-      // убрать хвостовые дни
+      // удалить лишние
       Object.keys(next.byDay).forEach(k => {
         const d = Number(k)
         if (d > days) delete next.byDay[d]
@@ -85,13 +98,15 @@ export default function App(){
     })
   }, [days])
 
-  // если участников больше допустимого — обрезаем
+  // если участников стало больше допустимого — обрежем
   React.useEffect(() => {
     if (N > maxAllowed) setN(maxAllowed)
   }, [maxAllowed])
 
-  // -------- добавление услуг --------
-  function addServiceToDay(service, day) {
+  // ----------- добавление услуг -----------
+  function getServiceById(id){ return services.find(s => s.id === id) }
+
+  function addServiceToDay(service, day){
     setItems(prev => {
       const next = { ...prev, byDay: { ...prev.byDay } }
       if (!next.byDay[day]) next.byDay[day] = []
@@ -99,16 +114,18 @@ export default function App(){
       return next
     })
   }
-  function addServiceAllDays(service) {
+
+  function addServiceAllDays(service){
     setItems(prev => {
       const next = { ...prev, byDay: { ...prev.byDay } }
-      for (let d = 1; d <= days; d++) {
+      for (let d = 1; d <= days; d++){
         if (!next.byDay[d]) next.byDay[d] = []
         next.byDay[d] = [...next.byDay[d], { id: cryptoRandom(), serviceId: service.id }]
       }
       return next
     })
   }
+
   function addServicePerTour(service){
     setItems(prev => ({ ...prev, perTour: [...prev.perTour, { id: cryptoRandom(), serviceId: service.id }] }))
   }
@@ -121,22 +138,14 @@ export default function App(){
     })
   }
 
-  function getServiceById(id){
-    return services.find(s => s.id === id)
-  }
-
-  // -------- калькуляция --------
-  // базовая стоимость на 1 чел за весь тур (без агента):
-  //   суммируем за каждый день:
-  //     perPerson: сумма цен (на 1 чел)
-  //     perGroup : сумма цен / N
-  //   + perTour (единоразовое на группу): сумма / N
+  // ----------- калькуляция -----------
+  // базовая стоимость на 1 чел за весь тур (без агента)
   const perPersonTotal = React.useMemo(() => {
     const participants = Number(N || 0)
     if (!participants) return 0
 
     let sumDays = 0
-    for (let d = 1; d <= days; d++) {
+    for (let d = 1; d <= days; d++){
       const dayItems = items.byDay[d] || []
       let dayPerPerson = 0
       let dayPerGroup  = 0
@@ -145,14 +154,12 @@ export default function App(){
         if (!s) return
         if (s.type === TYPE_PER_PERSON) dayPerPerson += Number(s.price || 0)
         else if (s.type === TYPE_PER_GROUP) dayPerGroup += Number(s.price || 0)
-        else if (s.type === TYPE_PER_TOUR) {
-          // если вдруг в дневной список попало "на весь тур" — игнорируем тут
-        }
+        // TYPE_PER_TOUR игнорируем в дневной сетке
       })
       sumDays += dayPerPerson + (dayPerGroup / participants)
     }
 
-    // услуги на весь тур: единоразово / N
+    // на весь тур (единоразово): делим на N
     const perTourSum = items.perTour.reduce((acc, it) => {
       const s = getServiceById(it.serviceId)
       return acc + Number(s?.price || 0)
@@ -167,34 +174,41 @@ export default function App(){
   )
 
   const perPersonWithAgent = React.useMemo(
-  () => +((perPersonTotal || 0) * agentCoef).toFixed(2),
-  [perPersonTotal, agentCoef]
-)
+    () => +((perPersonTotal || 0) * agentCoef).toFixed(2),
+    [perPersonTotal, agentCoef]
+  )
 
-const groupTotalWithAgent = React.useMemo(
-  () => +((groupTotal || 0) * agentCoef).toFixed(2),
-  [groupTotal, agentCoef]
-)
+  const groupTotalWithAgent = React.useMemo(
+    () => +((groupTotal || 0) * agentCoef).toFixed(2),
+    [groupTotal, agentCoef]
+  )
 
-// ВОЗНАГРАЖДЕНИЕ АГЕНТА — строго как % от суммы без агента
-const agentReward = React.useMemo(
-  () => +((groupTotal || 0) * (agentPct / 100)).toFixed(2),
-  [groupTotal, agentPct]
-)
+  // вознаграждение агента = % от суммы без агента
+  const agentReward = React.useMemo(
+    () => +((groupTotal || 0) * (agentPct / 100)).toFixed(2),
+    [groupTotal, agentPct]
+  )
 
-  // -------------------- Рендер --------------------
   return (
     <div className="page">
-
       <Topbar
         projectName={projectName}
         setProjectName={setProjectName}
         perPersonWithAgent={perPersonWithAgent}
         groupTotalWithAgent={groupTotalWithAgent}
+        agentReward={agentReward}
         agentPct={agentPct}
       />
 
-      <div className="content" style={{ display: 'grid', gridTemplateColumns: '280px 1fr 340px', gap: 16, padding: 16 }}>
+      <div
+        className="content"
+        style={{
+          display:'grid',
+          gridTemplateColumns:'280px 1fr 340px',
+          gap:16,
+          padding:16
+        }}
+      >
         {/* ЛЕВАЯ ПАНЕЛЬ — замороженная версия */}
         <LeftCatalog
           services={services}
@@ -212,7 +226,7 @@ const agentReward = React.useMemo(
           onRemove={removeItemFromDay}
         />
 
-        {/* ПРАВАЯ ПАНЕЛЬ — замороженная версия (с фиксами ввода) */}
+        {/* ПРАВАЯ ПАНЕЛЬ — замороженная (с фиксом ввода чисел) */}
         <RightPanel
           days={days}
           setDays={setDays}
@@ -235,8 +249,10 @@ const agentReward = React.useMemo(
   )
 }
 
-// -------------------- Шапка --------------------
-function Topbar({ projectName, setProjectName, perPersonWithAgent, groupTotalWithAgent, agentPct }){
+// =======================================
+//               ШАПКА
+// =======================================
+function Topbar({ projectName, setProjectName, perPersonWithAgent, groupTotalWithAgent, agentReward, agentPct }){
   return (
     <div style={{
       background: 'linear-gradient(135deg, #00B4DB, #0083B0)',
@@ -247,20 +263,20 @@ function Topbar({ projectName, setProjectName, perPersonWithAgent, groupTotalWit
       zIndex: 5
     }}>
       <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap: 12, alignItems:'center' }}>
-        <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-          <span style={{ fontSize:18, fontWeight:800 }}>🌴 Калькулятор эвентов и туров</span>
+        <div style={{ display:'flex', gap:12, alignItems:'center', minWidth:0 }}>
+          <span style={{ fontSize:18, fontWeight:800, whiteSpace:'nowrap' }}>🌴 Калькулятор эвентов и туров</span>
           <input
             value={projectName}
             onChange={e=>setProjectName(e.target.value)}
             placeholder="Название проекта"
             style={{
               background:'#ffffff22', color:'#fff', border:'1px solid #ffffff44',
-              borderRadius:10, padding:'6px 10px', minWidth:220
+              borderRadius:10, padding:'6px 10px', minWidth:180, maxWidth:360, width:'100%'
             }}
           />
         </div>
 
-        <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-end' }}>
+        <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-end', flexWrap:'wrap' }}>
           <button className="primary">+ Новый</button>
           <button className="primary">💾 Сохранить</button>
           <button className="secondary">📂 Открыть</button>
@@ -269,16 +285,17 @@ function Topbar({ projectName, setProjectName, perPersonWithAgent, groupTotalWit
         <div style={{ textAlign:'right', fontSize:13, lineHeight:1.3 }}>
           <div>За тур (на чел, с агентом): <b>{money(perPersonWithAgent)}</b></div>
           <div>Итого по группе (с агентом): <b>{money(groupTotalWithAgent)}</b></div>
-          <div>Вознаграждение агента: <b>{money(groupTotalWithAgent - (perPersonWithAgent * 0 + (groupTotalWithAgent/ (1 + agentPct/100))))}</b> ({agentPct}%)</div>
+          <div>Вознаграждение агента: <b>{money(agentReward)}</b> ({agentPct}%)</div>
         </div>
       </div>
     </div>
   )
 }
 
-// -------------------- Левая панель (замороженная логика) --------------------
+// =======================================
+//           ЛЕВАЯ ПАНЕЛЬ (заморожено)
+// =======================================
 function LeftCatalog({ services, days, onAddDay, onAddAllDays, onAddPerTour }){
-  // делим на «на весь тур» и «ежедневные»
   const perTour = services.filter(s => s.type === TYPE_PER_TOUR)
   const daily   = services.filter(s => s.type !== TYPE_PER_TOUR)
 
@@ -327,7 +344,10 @@ function ServiceRow({ service, days, mode, onAddDay, onAddAllDays, onAddPerTour 
   const dayOptions = Array.from({length:days}, (_,i)=> i+1 )
 
   return (
-    <div style={{ border:'1px solid #e7eef6', borderRadius:10, padding:10, display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, alignItems:'center' }}>
+    <div style={{
+      border:'1px solid #e7eef6', borderRadius:10, padding:10,
+      display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, alignItems:'center'
+    }}>
       <div>
         <div style={{ fontWeight:600 }}>{service.name_ru}</div>
         <div style={{ opacity:.6, fontSize:12 }}>
@@ -340,7 +360,7 @@ function ServiceRow({ service, days, mode, onAddDay, onAddAllDays, onAddPerTour 
       {mode === 'daily' ? (
         <>
           <select value={dayPick} onChange={e=>setDayPick(e.target.value)} style={{ height:36 }}>
-            <option value="all">— выбрать дни</option>
+            <option value="all">— выбрать день —</option>
             {dayOptions.map(d => <option key={d} value={String(d)}>День {d}</option>)}
             <option value="*">все дни</option>
           </select>
@@ -366,7 +386,9 @@ function ServiceRow({ service, days, mode, onAddDay, onAddAllDays, onAddPerTour 
   )
 }
 
-// -------------------- Центральная панель (замороженная логика) --------------------
+// =======================================
+//        ЦЕНТРАЛЬНАЯ ПАНЕЛЬ (заморожено)
+// =======================================
 function CenterDays({ items, days, getServiceById, onRemove }){
   return (
     <div style={{ overflow:'auto' }}>
@@ -404,7 +426,9 @@ function CenterDays({ items, days, getServiceById, onRemove }){
   )
 }
 
-// -------------------- Правая панель (замороженная с фиксами ввода) --------------------
+// =======================================
+//     ПРАВАЯ ПАНЕЛЬ (заморожено + ввод)
+// =======================================
 function RightPanel({
   days, setDays,
   singles, onSinglesChange,
@@ -412,6 +436,7 @@ function RightPanel({
   description, setDescription,
   perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
 }){
+  // локальные строки для ввода (можно стереть и набрать заново)
   const [daysInput, setDaysInput] = React.useState(String(days || 1))
   const [participantsInput, setParticipantsInput] = React.useState(String(N || 1))
 
@@ -446,6 +471,7 @@ function RightPanel({
     <div>
       <div style={card}>
         <h4 style={{marginTop:0}}>Параметры тура</h4>
+
         <div style={{display:'grid', gap:8}}>
           <label>Дней
             <input
@@ -476,7 +502,12 @@ function RightPanel({
           </label>
 
           <label>Описание
-            <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Свободный текст: заметки, список участников, детали..." />
+            <textarea
+              rows={4}
+              value={description}
+              onChange={e=>setDescription(e.target.value)}
+              placeholder="Свободный текст: заметки, список участников, детали..."
+            />
           </label>
         </div>
 
@@ -492,11 +523,4 @@ function RightPanel({
       </div>
     </div>
   )
-}
-
-// -------------------- Вспомогательное --------------------
-function cryptoRandom(){
-  // компактный id для UI
-  if (crypto?.randomUUID) return crypto.randomUUID()
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
