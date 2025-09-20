@@ -8,7 +8,6 @@
   --line:#e6eef6;
   --radius:16px;
   --shadow:0 8px 24px rgba(11,43,59,.06), 0 2px 6px rgba(11,43,59,.05);
-  --topbarH: 64px;
 }
 
 *{ box-sizing:border-box }
@@ -18,7 +17,7 @@ body{
   font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color:var(--ink);
   background:linear-gradient(180deg, #f0fbff 0%, #f6fffe 100%);
-  overflow:hidden; /* скролл только у центральной колонки */
+  overflow:hidden; /* скролл только у внутренних областей */
 }
 
 a{ color:var(--brand); text-decoration:none }
@@ -61,11 +60,21 @@ textarea{ resize:vertical }
 .table thead th{ font-size:12px; color:var(--muted); font-weight:600; border-top:0 }
 .table tr:hover td{ background:#f9fdff }
 
-/* ───── Шапка: адаптивная, переносится и умеет горизонтально скроллиться ───── */
+/* ───── Каркас страницы: колонка-шапка + контент ───── */
+.shell{
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  min-height:0; /* важно для Safari */
+}
+
+/* ───── Шапка: адаптивная, sticky, с fallback-цветом ───── */
 .topbar{
+  position:sticky; top:0; z-index:10;
   display:flex; flex-wrap:wrap; align-items:center; gap:10px;
   padding:10px 12px;
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
+  background-color: var(--brand); /* fallback для Safari */
+  background-image: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
   color:white;
   box-shadow:var(--shadow);
 }
@@ -75,7 +84,7 @@ textarea{ resize:vertical }
 .top-actions{
   flex: 999 1 auto;
   display:flex; align-items:center; gap:8px;
-  flex-wrap:wrap;              /* переносятся на 2+ строки */
+  flex-wrap:wrap;              /* перенос в две строки */
   justify-content:flex-end;
   min-width:220px;
   max-width:100%;
@@ -84,8 +93,6 @@ textarea{ resize:vertical }
   display:inline-flex; align-items:center; gap:8px;
   background:#ffffff22; color:#fff; padding:6px 10px; border-radius:999px; font-size:13px;
 }
-
-/* На узких экранах вместо переноса — горизонтальная прокрутка кнопок */
 @media (max-width: 700px){
   .top-actions{
     flex-wrap:nowrap;
@@ -97,30 +104,22 @@ textarea{ resize:vertical }
   .top-actions > *{ flex:0 0 auto }
 }
 
-/* ───── Каркас: шапка + трёхколоночный контент ───── */
-.shell{
-  display:grid;
-  grid-template-rows: auto 1fr;
-  height:100vh;
-}
-
-.grid{
+/* ───── Контент: трёхколоночная сетка ───── */
+.content{
+  flex:1 1 auto;
+  min-height:0;            /* критично: иначе Safari «съест» высоту */
   display:grid;
   grid-template-columns: 25vw 1fr 20vw;
   gap:16px;
   padding:16px;
-  height:100%;
-  min-height:0;
-  overflow:hidden;
+  overflow:hidden;         /* чтобы скролл был только у внутренних областей */
 }
 
-/* Боковые колонки закреплены, внутри могут скроллиться */
+/* Боковые колонки закреплены (не скроллятся вместе с центром) */
 .sidebar-left, .sidebar-right{
-  position:sticky;
-  top:0;
-  align-self:start;
-  height: calc(100vh - 16px - 56px); /* минус примерная высота шапки и паддинги */
-  overflow:auto;
+  position:sticky; top:0; align-self:start;
+  height:100%;
+  overflow:auto;           /* если контента много — прокрутка внутри панели */
   padding-bottom:16px;
   min-height:0;
 }
