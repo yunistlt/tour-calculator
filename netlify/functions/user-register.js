@@ -3,49 +3,43 @@ import { supabase } from './_common.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
+const AUTH_DISABLED = String(process.env.AUTH_DISABLED || '').toLowerCase() === 'true'
+
 export async function handler(event) {
   try {
     if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
+      return { statusCode: 405, body: JSON.stringify({ error: 'method_not_allowed' }) }
     }
 
     const { username, password } = JSON.parse(event.body || '{}')
-    if (!username || !password) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'username/password required' }) }
+    const uname = String(username || '').trim()
+
+    if (!uname) return { statusCode: 400, body: JSON.stringify({ error: 'username required' }) }
+
+    // ── ТЕСТОВЫЙ РЕЖИМ: игнорим пароль, создаём пользователя если нужно ─
+    if (AUTH_DISABLED) {
+      let { data: user } = await supabase.from('users').select('*').eq('username', uname).maybeSingle()
+      if (!user) {
+        const ins = await supabase.from('users').insert([{ username: uname, password: 'TEST' }]).select().single()
+        user = ins.data
+      }
+      const token = jwt.sign({ sub: user.id, username: user.username, role: 'USER' }, process.env.JWT_SECRET, { expiresIn: '30d' })
+      return { statusCode: 200, body: JSON.stringify({ token, user: { id: user.id, username: user.username } }) }
     }
+    // ───────────────────────────────────────────────────────────────────
 
-    // проверяем, что пользователя ещё нет
-    const { data: existing } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .single()
+    if (!password) return { statusCode: 400, body: JSON.stringify({ error: 'password required' }) }
 
-    if (existing) {
-      return { statusCode: 409, body: JSON.stringify({ error: 'Username already exists' }) }
-    }
+    const { data: exists } = await supabase.from('users').select('id').eq('username', uname).maybeSingle()
+    if (exists) return { statusCode: 409, body: JSON.stringify({ error: 'Username already exists' }) }
 
-    const passwordHash = await bcrypt.hash(password, 10)
-
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{ username, password: passwordHash }])
-      .select()
-      .single()
-
+    const hash = await bcrypt.hash(password, 10)
+    const { data: user, error } = await supabase.from('users').insert([{ username: uname, password: hash }]).select().single()
     if (error) throw error
 
-    const token = jwt.sign(
-      { sub: data.id, username, role: 'USER' },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    )
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ token, user: { id: data.id, username } })
-    }
+    const token = jwt.sign({ sub: user.id, username: user.username, role: 'USER' }, process.env.JWT_SECRET, { expiresIn: '7d' })
+    return { statusCode: 200, body: JSON.stringify({ token, user: { id: user.id, username: user.username } }) }
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message }) }
+    return { statusCode: 500, body: JSON.stringify({ error: 'server_error', detail: e.message }) }
   }
 }
