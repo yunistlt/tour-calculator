@@ -167,19 +167,20 @@ export default function App(){
   )
 
   const perPersonWithAgent = React.useMemo(
-    () => +((perPersonTotal || 0) * agentCoef).toFixed(2),
-    [perPersonTotal, agentCoef]
-  )
+  () => +((perPersonTotal || 0) * agentCoef).toFixed(2),
+  [perPersonTotal, agentCoef]
+)
 
-  const groupTotalWithAgent = React.useMemo(
-    () => +((groupTotal || 0) * agentCoef).toFixed(2),
-    [groupTotal, agentCoef]
-  )
+const groupTotalWithAgent = React.useMemo(
+  () => +((groupTotal || 0) * agentCoef).toFixed(2),
+  [groupTotal, agentCoef]
+)
 
-  const agentReward = React.useMemo(
-    () => +((groupTotalWithAgent || 0) - (groupTotal || 0)).toFixed(2),
-    [groupTotalWithAgent, groupTotal]
-  )
+// ВОЗНАГРАЖДЕНИЕ АГЕНТА — строго как % от суммы без агента
+const agentReward = React.useMemo(
+  () => +((groupTotal || 0) * (agentPct / 100)).toFixed(2),
+  [groupTotal, agentPct]
+)
 
   // -------------------- Рендер --------------------
   return (
