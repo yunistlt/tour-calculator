@@ -1,16 +1,36 @@
 // netlify/functions/public-settings.js
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './_common.js'
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-const json = (code, body) => ({ statusCode: code, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}, body: JSON.stringify(body) })
+export async function handler() {
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('agent_markup_percent')
+      .limit(1)
+      .single()
 
-export async function handler(){
-  const { data, error } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'agent_markup_percent')
-    .maybeSingle()
-  if(error) return json(200, { agent_markup_percent: 0 })
-  const pct = Number(data?.value ?? 0)
-  return json(200, { agent_markup_percent: isFinite(pct) ? pct : 0 })
+    if (error) throw error
+    const pct = Number(data?.agent_markup_percent ?? 25)
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        // ВЫКЛЮЧАЕМ кэш на всех уровнях
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+      body: JSON.stringify({ agent_markup_percent: pct }),
+    }
+  } catch (e) {
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      },
+      body: JSON.stringify({ agent_markup_percent: 25 }),
+    }
+  }
 }
