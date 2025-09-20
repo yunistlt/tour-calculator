@@ -53,3 +53,41 @@ export async function handler(event) {
     return json(500, { error: 'server_error', detail: e.message })
   }
 }
+// netlify/functions/scenarios.js
+import { createClient } from '@supabase/supabase-js'
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+
+export const handler = async (event) => {
+  // ... уже есть AUTH и прочее
+
+  if (event.httpMethod === 'DELETE') {
+    try {
+      const id = (event.queryStringParameters && event.queryStringParameters.id)
+        || (JSON.parse(event.body || '{}').id)
+      if (!id) return resp(400, { error: 'id_required' })
+
+      // опционально: проверка, что сценарий принадлежит пользователю
+      // const userId = decoded.sub || decoded.user_id
+
+      // сначала удалим дочерние записи (items/files), затем сам сценарий
+      await supabase.from('scenario_items').delete().eq('scenario_id', id)
+      await supabase.from('scenario_files').delete().eq('scenario_id', id)
+      const { error } = await supabase.from('scenarios').delete().eq('id', id)
+      if (error) return resp(500, { error: error.message })
+
+      return resp(200, { ok: true })
+    } catch (e) {
+      return resp(500, { error: String(e.message || e) })
+    }
+  }
+
+  // ...остальные методы GET/POST/PUT
+}
+
+function resp(statusCode, body){
+  return {
+    statusCode,
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  }
+}
