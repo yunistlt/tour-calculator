@@ -6,7 +6,6 @@ export default function App(){
   const nav = useNavigate()
   const { userToken, isAdmin } = useAuth()
 
-  // состояние (логику расчётов не трогаем)
   const [scenario,setScenario] = useState({ id:null, name:'Мой тур', days:1, participants:2, singles:0, description:'' })
   const [services,setServices] = useState([])
   const [tourItems,setTourItems] = useState([])
@@ -16,18 +15,26 @@ export default function App(){
   const [list,setList] = useState([])
   const [saving,setSaving] = useState(false)
 
-  // защита: только пользователь
+  // новая настройка
+  const [agentPct, setAgentPct] = useState(0)
+
   useEffect(()=>{
     if (!userToken) { nav('/login') }
     if (isAdmin) { alert('Калькулятор доступен только пользователям'); nav('/login') }
   }, [userToken, isAdmin, nav])
 
-  // справочник услуг
   useEffect(()=>{
     fetch('/api/services').then(r=>r.json()).then(setServices)
   },[])
 
-  // параметры вместимости
+  // Загрузка процента наценки (публично)
+  useEffect(()=>{
+    fetch('/api/public-settings')
+      .then(r=>r.json())
+      .then(d=> setAgentPct(Number(d?.agent_markup_percent || 0)))
+      .catch(()=> setAgentPct(0))
+  },[])
+
   const DOUBLE_ROOMS = 10
   const N = Number(scenario.participants || 0)
   const S = Number(scenario.singles || 0)
@@ -35,13 +42,11 @@ export default function App(){
   const maxAllowed = DOUBLE_ROOMS * 2 - S_EFF
   const days = Array.from({length: Math.max(1, Number(scenario.days||1))}, (_,i)=>i+1)
 
-  // хендлеры параметров
   function handleParticipantsChange(e){
     const raw = Number(e.target.value || 0)
     if (raw > maxAllowed){
       alert(`Слишком много участников: максимум ${maxAllowed} при ${S_EFF} single.`)
-      setScenario(prev => ({...prev, participants: maxAllowed}))
-      return
+      setScenario(prev => ({...prev, participants: maxAllowed})); return
     }
     setScenario(prev => ({...prev, participants: Math.max(1, raw)}))
   }
@@ -61,7 +66,6 @@ export default function App(){
     setScenario(prev => ({...prev, days: Math.max(1, raw)}))
   }
 
-  // каталог услуг
   const tourCatalog  = services.filter(s=>s.type==='PER_TOUR')
   const dailyCatalog = services.filter(s=>s.type==='PER_PERSON' || s.type==='PER_GROUP')
 
@@ -74,16 +78,14 @@ export default function App(){
     setTourItems(tourItems.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x ))
   }
 
-  // добавить дневную услугу в конкретный день
   function addDailyToDay(service, day){
     const d = Number(day)
     if(!d) return
     const arr = dayItems[d] || []
-    if(arr.find(x=>x.id===service.id)) return // уже есть
+    if(arr.find(x=>x.id===service.id)) return
     const next = [...arr, { id:service.id, service_id:service.id, name_ru:service.name_ru, type:service.type, price:Number(service.price), repeats:1 }]
     setDayItems({...dayItems, [d]: next})
   }
-  // добавить дневную услугу во все дни
   function addDailyToAllDays(service){
     const next = {...dayItems}
     days.forEach(d=>{
@@ -95,7 +97,6 @@ export default function App(){
     })
     setDayItems(next)
   }
-
   function toggleItem(day, service){
     const arr = dayItems[day] || []
     const exists = arr.find(x=>x.id===service.id)
@@ -107,7 +108,7 @@ export default function App(){
     setDayItems({...dayItems, [day]: arr.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x )})
   }
 
-  // расчёт
+  // расчёты (как были)
   const perPersonTour = tourItems.reduce((sum, it)=>{
     if(N>0) return sum + (Number(it.price) * (it.repeats||1))/N
     return sum
@@ -126,6 +127,10 @@ export default function App(){
   const perPersonTotal = perPersonTour + perPersonTotalDays
   const groupTotal = perPersonTotal * N
 
+  // НОВОЕ: вознаграждение и рекомендованная цена
+  const agentReward = groupTotal * (agentPct/100)                    // сумма наценки на весь тур (для агента)
+  const recommendedPerPerson = perPersonTotal * (1 + agentPct/100)   // рекомендованная цена на человека
+
   // payload
   function buildItemsPayload(){
     const itemsTour = tourItems.map(it => ({
@@ -139,7 +144,6 @@ export default function App(){
     return [...itemsTour, ...itemsDays]
   }
 
-  // сохранение
   async function saveScenario(){
     if(saving) return
     if(!userToken){ alert('Войдите как пользователь'); return }
@@ -170,7 +174,6 @@ export default function App(){
     }
   }
 
-  // диалог «открыть»
   async function openDialog(){
     setModalOpen(true)
     const r = await fetch('/api/scenarios', { headers: { Authorization:'Bearer '+userToken } })
@@ -238,15 +241,14 @@ export default function App(){
 
   return (
     <div className="shell">
-      {/* Шапка с итогами (адаптивная, Safari-friendly) */}
+      {/* Шапка */}
       <div className="topbar">
-        <div className="top-title">
-          <h2>Калькулятор туров</h2>
-        </div>
+        <div className="top-title"><h2>Калькулятор туров</h2></div>
         <div className="top-actions">
           <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
           <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
-          <span className="pill">На группу: <b>{groupTotal.toFixed(2)}</b></span>
+          <span className="pill">Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</span>
+          <span className="pill">Рекоменд. цена/чел: <b>{recommendedPerPerson.toFixed(2)}</b></span>
 
           <button
             className="secondary btn-sm"
@@ -254,9 +256,7 @@ export default function App(){
               setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' })
               setTourItems([]); setDayItems({}); setFiles([])
             }}
-          >
-            ＋ Новый
-          </button>
+          >＋ Новый</button>
 
           <button className="btn-sm" onClick={saveScenario} disabled={saving}>
             {saving ? 'Сохраняю…' : '💾 Сохранить'}
@@ -267,9 +267,9 @@ export default function App(){
         </div>
       </div>
 
-      {/* Контент: левый каталог | центр | правые параметры */}
+      {/* Контент */}
       <div className="content">
-        {/* ЛЕВАЯ ПАНЕЛЬ (каталог услуг) */}
+        {/* Левая панель */}
         <aside className="sidebar-left">
           <div className="card" style={{marginBottom:16}}>
             <h3 style={{margin:'0 0 8px'}}>Услуги на весь тур</h3>
@@ -325,7 +325,7 @@ export default function App(){
           </div>
         </aside>
 
-        {/* ЦЕНТР (скроллится) */}
+        {/* Центр */}
         <main className="center">
           <div className="card">
             <h3>Выбранные услуги по дням</h3>
@@ -350,9 +350,7 @@ export default function App(){
                               : <span className="small">—</span>}
                           </td>
                           <td data-label="На чел/день">{perPerson.toFixed(2)}</td>
-                          <td data-label="">
-                            <button className="secondary btn-sm" onClick={()=>toggleItem(d,{id:it.id})}>Убрать</button>
-                          </td>
+                          <td data-label=""><button className="secondary btn-sm" onClick={()=>toggleItem(d,{id:it.id})}>Убрать</button></td>
                         </tr>
                       )
                     })}
@@ -370,12 +368,13 @@ export default function App(){
             <div className="row">
               <div className="small">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></div>
               <div className="small">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></div>
-              <div className="small">На группу: <b>{groupTotal.toFixed(2)}</b></div>
+              <div className="small">Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
+              <div className="small">Рекоменд. цена/чел: <b>{recommendedPerPerson.toFixed(2)}</b></div>
             </div>
           </div>
         </main>
 
-        {/* ПРАВАЯ ПАНЕЛЬ (параметры тура) */}
+        {/* Правая панель */}
         <aside className="sidebar-right">
           <div className="card" style={{marginBottom:16}}>
             <h3 style={{margin:'0 0 8px'}}>Параметры тура</h3>
