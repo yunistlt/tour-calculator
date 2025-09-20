@@ -139,3 +139,12 @@ textarea{ resize:vertical }
   padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#f7fdff;
 }
 .service-chip:hover{ border-color:#b9e9f6 }
+
+/* ── Админ-страницы: собственный вертикальный скролл ── */
+.admin-page{
+  height: 100vh;           /* занимает весь экран */
+  overflow: auto;          /* скролл внутри админ-страницы */
+  padding: 16px;
+  background: linear-gradient(180deg, #f0fbff 0%, #f6fffe 100%);
+}
+
