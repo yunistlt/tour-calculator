@@ -1,64 +1,46 @@
+// src/ui/Login.jsx
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from './store'
 
-export default function Login(){
-  const nav = useNavigate()
-  const { setUserToken, logoutAll } = useAuth()
-  const [login, setLogin] = useState('')
+export default function Login() {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const nav = useNavigate()
 
-  async function onSubmit(e){
+  async function handleLogin(e) {
     e.preventDefault()
     setError('')
-    const username = (login || '').trim()
-    const pwd = (password || '').trim()
-    if(!username || !pwd){ setError('Введите логин и пароль'); return }
     setLoading(true)
-    try{
+    try {
       const r = await fetch('/api/user-login', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ username, password: pwd }) // <-- ВАЖНО: username
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
       })
-      const data = await r.json().catch(()=>({}))
-      if(!r.ok || !data?.token){
-        throw new Error(data?.error || 'Неверный логин или пароль')
-      }
-      logoutAll()
-      setUserToken(data.token)
-      nav('/') // в калькулятор
-    }catch(err){
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.error || 'Ошибка входа')
+      localStorage.setItem('userToken', data.token)
+      nav('/')
+    } catch (err) {
       setError(err.message)
-    }finally{
+    } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="container">
-      <div className="header">
-        <h2>Вход (пользователь)</h2>
-        <Link to="/admin/login" className="small">Админ →</Link>
-      </div>
-
-      <div className="card" style={{maxWidth: 520}}>
-        <form onSubmit={onSubmit}>
-          <div>
-            <label>Логин</label>
-            <input value={login} onChange={e=>setLogin(e.target.value)} autoFocus />
-          </div>
-          <div>
-            <label>Пароль</label>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} />
-          </div>
-          {error && <div className="alert">{error}</div>}
-          <button type="submit" disabled={loading}>
-            {loading ? 'Входим…' : 'Войти'}
-          </button>
-        </form>
+    <div className="auth-page">
+      <h2>Вход</h2>
+      <form onSubmit={handleLogin} style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+        <input placeholder="Логин" value={username} onChange={e => setUsername(e.target.value)} />
+        <input type="password" placeholder="Пароль" value={password} onChange={e => setPassword(e.target.value)} />
+        {error && <div style={{ color: 'red', fontSize: 12 }}>{error}</div>}
+        <button type="submit" disabled={loading}>{loading ? 'Вхожу...' : 'Войти'}</button>
+      </form>
+      <div style={{ marginTop: 8 }}>
+        Нет аккаунта? <Link to="/register">Регистрация</Link>
       </div>
     </div>
   )
