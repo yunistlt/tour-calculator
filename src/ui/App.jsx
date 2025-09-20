@@ -465,86 +465,88 @@ function RightPanel({
   singles, onSinglesChange,
   N, maxAllowed, onParticipantsChange,
   description, setDescription,
-  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct,
-  // файлы
-  files, setFiles, userToken
-}){
-  async function onSelectFiles(e){
-    const list = Array.from(e.target.files||[])
-    if(!list.length) return
+  perPersonTotal, perPersonWithAgent, groupTotal, groupTotalWithAgent, agentReward, agentPct
+}) {
+  // --- локальные строки для ввода, чтобы можно было очищать поле ---
+  const [daysInput, setDaysInput] = React.useState(String(days || 1))
+  const [participantsInput, setParticipantsInput] = React.useState(String(N || 1))
 
-    // проверяем размер
-    const overs = list.filter(f => f.size > MAX_FILE_MB*1024*1024)
-    if(overs.length){
-      alert(`Файл(ы) превышают ${MAX_FILE_MB} МБ: ${overs.map(f=>f.name).join(', ')}`)
-      return
-    }
+  // синхронизация если внешние значения меняются
+  React.useEffect(() => { setDaysInput(String(days || 1)) }, [days])
+  React.useEffect(() => { setParticipantsInput(String(N || 1)) }, [N])
 
-    // грузим по одному
-    const uploaded = []
-    for (const f of list){
-      try{
-        const fd = new FormData()
-        fd.append('file', f)
-        const r = await fetch('/api/upload', {
-          method:'POST',
-          headers: userToken ? { Authorization: 'Bearer '+userToken } : undefined,
-          body: fd
-        })
-        const data = await r.json()
-        if(!r.ok) throw new Error(data.error || 'upload_failed')
-        // ожидаем, что вернёт { url } или { publicUrl }
-        uploaded.push({ name: f.name, size: f.size, url: data.url || data.publicUrl || '' })
-      }catch(err){
-        alert(`Не удалось загрузить ${f.name}: ${String(err.message||err)}`)
-      }
+  // если изменился допустимый максимум (из-за singles), подожмём текущее N
+  React.useEffect(() => {
+    if (maxAllowed && N > maxAllowed) {
+      onParticipantsChange(maxAllowed)
+      setParticipantsInput(String(maxAllowed))
     }
-    if(uploaded.length){
-      setFiles([ ...uploaded, ...files ])
-    }
-    // очистим инпут
-    e.target.value = ''
+  }, [maxAllowed])
+
+  function commitDays() {
+    let v = parseInt((daysInput || '').replace(/\D/g, ''), 10)
+    if (isNaN(v)) v = 1
+    v = Math.max(1, Math.min(60, v))          // пределы дней (при желании поправь 60)
+    setDays(v)
+    setDaysInput(String(v))
   }
 
-  function removeFile(url){
-    setFiles(files.filter(x=>x.url!==url))
+  function commitParticipants() {
+    let v = parseInt((participantsInput || '').replace(/\D/g, ''), 10)
+    if (isNaN(v)) v = 1
+    const max = Math.max(1, Number(maxAllowed || 1))
+    v = Math.max(1, Math.min(max, v))         // 1 .. maxAllowed
+    onParticipantsChange(v)
+    setParticipantsInput(String(v))
   }
 
   return (
-    <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
+    <div>
       <div style={card}>
         <h4 style={{marginTop:0}}>Параметры тура</h4>
+
         <div style={{display:'grid', gap:8}}>
           <label>Дней
-            <input type="number" min="1" value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value||1)))} />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Введите число"
+              value={daysInput}
+              onChange={e=>setDaysInput(e.target.value)}
+              onBlur={commitDays}
+              onKeyDown={e=>{ if(e.key==='Enter') commitDays() }}
+            />
           </label>
+
           <label>Singles (одноместных)
-            <input type="number" min="0" max={10} value={singles} onChange={e=>onSinglesChange(e.target.value)} />
+            <input
+              type="number"
+              min="0" max="10"
+              value={singles}
+              onChange={e=>onSinglesChange(e.target.value)}
+            />
           </label>
+
           <label>Участников (макс {maxAllowed})
-            <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder={`1–${maxAllowed}`}
+              value={participantsInput}
+              onChange={e=>setParticipantsInput(e.target.value)}
+              onBlur={commitParticipants}
+              onKeyDown={e=>{ if(e.key==='Enter') commitParticipants() }}
+            />
           </label>
 
           <label>Описание
-            <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Свободный текст: заметки, список участников, детали..." />
+            <textarea
+              rows={4}
+              value={description}
+              onChange={e=>setDescription(e.target.value)}
+              placeholder="Свободный текст: заметки, список участников, детали..."
+            />
           </label>
-
-          <div>
-            <div style={{fontWeight:600, margin:'6px 0 6px'}}>Файлы (до {MAX_FILE_MB} МБ/файл)</div>
-            <input type="file" multiple onChange={onSelectFiles} />
-            {files.length>0 && (
-              <div style={{marginTop:8, display:'grid', gap:6}}>
-                {files.map(f=>(
-                  <div key={f.url || f.name} style={{display:'grid', gridTemplateColumns:'1fr auto', gap:8, alignItems:'center'}}>
-                    <a href={f.url || '#'} target="_blank" rel="noreferrer" style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-                      {f.name} <span style={{opacity:.6}}>({(f.size/1024/1024).toFixed(2)} МБ)</span>
-                    </a>
-                    <button className="secondary btn-sm" onClick={()=>removeFile(f.url)}>Удалить</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         <hr style={{margin:'12px 0'}} />
