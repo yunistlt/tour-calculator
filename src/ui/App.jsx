@@ -33,18 +33,18 @@ export default function App(){
   const [errorOpen, setErrorOpen] = useState('')
 
   // ====== загрузки справочников/настроек ======
- useEffect(() => {
-  const url = `/api/public-settings?t=${Date.now()}`  // байпас CDN
-  fetch(url, { cache: 'no-store' })                  // байпас браузера
-    .then(r => r.json())
-    .then(d => {
-      if (d && typeof d.agent_markup_percent !== 'undefined') {
-        setSettings({ agent_markup_percent: Number(d.agent_markup_percent) })
-      }
+// загрузка каталога услуг (с байпасом кэша)
+useEffect(() => {
+  const url = `/api/services?t=${Date.now()}`        // обходим CDN
+  fetch(url, { cache: 'no-store' })                  // обходим кэш браузера
+    .then(r => r.ok ? r.json() : [])
+    .then(list => {
+      // страховка от кривых данных
+      const safe = Array.isArray(list) ? list : []
+      setServices(safe) // твой setServices / setCatalog и т.п.
     })
-    .catch(()=>{})
+    .catch(() => setServices([]))
 }, [])
-
   // ====== вместимость ======
   const DOUBLE_ROOMS = 10
   const S = Math.max(0, Math.min(Number(singles||0), DOUBLE_ROOMS))
