@@ -33,15 +33,17 @@ export default function App(){
   const [errorOpen, setErrorOpen] = useState('')
 
   // ====== загрузки справочников/настроек ======
-  useEffect(()=>{
-    fetch('/api/services')
-      .then(r=>r.json()).then(d=> setServices(Array.isArray(d)? d:[]))
-      .catch(()=> setServices([]))
-
-    fetch('/api/public-settings')
-      .then(r=>r.json()).then(d=> setAgentPct(Number(d?.agent_markup_percent || 0)))
-      .catch(()=> setAgentPct(0))
-  }, [])
+ useEffect(() => {
+  const url = `/api/public-settings?t=${Date.now()}`  // байпас CDN
+  fetch(url, { cache: 'no-store' })                  // байпас браузера
+    .then(r => r.json())
+    .then(d => {
+      if (d && typeof d.agent_markup_percent !== 'undefined') {
+        setSettings({ agent_markup_percent: Number(d.agent_markup_percent) })
+      }
+    })
+    .catch(()=>{})
+}, [])
 
   // ====== вместимость ======
   const DOUBLE_ROOMS = 10
