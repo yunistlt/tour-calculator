@@ -12,6 +12,7 @@ const TYPES = [
 export default function AdminServices(){
   const nav = useNavigate()
   const { adminToken } = useAuth()
+
   const [rows, setRows] = useState([])
   const [agentPct, setAgentPct] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -23,23 +24,30 @@ export default function AdminServices(){
   const [newType, setNewType] = useState('PER_PERSON')
   const canCreate = useMemo(()=> newName.trim() && newType && newPrice !== '' , [newName,newType,newPrice])
 
+  // если нет токена — уводим на логин админа
   useEffect(()=>{
     if(!adminToken) nav('/admin/login')
   },[adminToken, nav])
 
+  // загрузка: услуги + текущая наценка агента
   useEffect(()=>{
     if(!adminToken) return
     ;(async()=>{
       try{
         setLoading(true); setError('')
+
         // услуги
-        const r = await fetch('/api/services', { headers:{ Authorization: 'Bearer '+adminToken } })
+        const r = await fetch('/api/services', {
+          headers:{ Authorization: 'Bearer '+adminToken }
+        })
         const d = await r.json()
         if(!r.ok) throw new Error(d.error || 'load_services_failed')
         setRows(Array.isArray(d) ? d : [])
 
-        // наценка
-        const s = await fetch('/api/public-settings')
+        // наценка (через админ-эндпоинт, чтобы быть консистентными c PUT)
+        const s = await fetch('/api/admin-settings', {
+          headers:{ Authorization:'Bearer '+adminToken }
+        })
         const sd = await s.json().catch(()=>({}))
         if(s.ok && typeof sd.agent_markup_percent!=='undefined'){
           setAgentPct(Number(sd.agent_markup_percent)||0)
@@ -52,21 +60,28 @@ export default function AdminServices(){
     })()
   },[adminToken])
 
+  // сохранить наценку
   async function saveMarkup(){
     try{
-      const r = await fetch('/api/public-settings', {
+      const r = await fetch('/api/admin-settings', {
         method:'PUT',
-        headers:{ 'Content-Type':'application/json' },
+        headers:{
+          'Content-Type':'application/json',
+          Authorization:'Bearer '+adminToken
+        },
         body: JSON.stringify({ agent_markup_percent: Number(agentPct||0) })
       })
+      const t = await r.json().catch(()=>({}))
       if(!r.ok){
-        const t = await r.json().catch(()=>({}))
         throw new Error(t.error || 'save_markup_failed')
       }
       alert('Наценка сохранена')
-    }catch(e){ alert('Ошибка: '+String(e.message||e)) }
+    }catch(e){
+      alert('Ошибка: '+String(e.message||e))
+    }
   }
 
+  // создать услугу
   async function createService(){
     if(!canCreate) return
     try{
@@ -88,6 +103,7 @@ export default function AdminServices(){
     }
   }
 
+  // обновить услугу
   async function updateRow(id, patch){
     try{
       const r = await fetch('/api/services', {
@@ -103,6 +119,7 @@ export default function AdminServices(){
     }
   }
 
+  // удалить услугу
   async function removeRow(id){
     if(!confirm('Удалить услугу?')) return
     try{
