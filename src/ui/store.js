@@ -1,6 +1,6 @@
 // src/ui/store.js
 import { create } from 'zustand'
-import jwtDecode from 'jwt-decode'
+import { jwtDecode } from 'jwt-decode'
 
 export const useAuth = create((set,get)=>({
   user:null,
