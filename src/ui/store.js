@@ -1,40 +1,57 @@
+// src/ui/store.js
 import { create } from 'zustand'
 import { jwtDecode } from 'jwt-decode'
 
-function readToken(key){
-  const t = localStorage.getItem(key) || ''
-  return t || ''
-}
-function roleFrom(t){
-  try { return t ? (jwtDecode(t).role || '') : '' } catch { return '' }
-}
+const AUTH_DISABLED = String(import.meta.env.VITE_AUTH_DISABLED || '').toLowerCase() === 'true'
 
-export const useAuth = create((set,get)=>({
-  // раздельные токены
-  userToken: readToken('userToken'),
-  adminToken: readToken('adminToken'),
+export const useAuth = create((set, get) => ({
+  userToken: null,
+  user: null,
+  adminToken: localStorage.getItem('adminToken') || null,
 
-  // геттеры-селекторы
-  isAdmin: !!roleFrom(readToken('adminToken')) && roleFrom(readToken('adminToken')) === 'ADMIN',
-  isUser:  !!roleFrom(readToken('userToken'))  && roleFrom(readToken('userToken'))  !== 'ADMIN',
-
-  // универсальный токен для калькулятора (всегда user)
-  token: readToken('userToken'),
-
-  // сеттеры
-  setUserToken: (t)=>{
-    if(t) localStorage.setItem('userToken', t); else localStorage.removeItem('userToken')
-    const admin = get().adminToken
-    set({ userToken: t||'', token: t||'', isUser: !!t, isAdmin: !!admin && roleFrom(admin)==='ADMIN' })
+  init() {
+    const t = localStorage.getItem('userToken')
+    if (t) {
+      try {
+        const p = jwtDecode(t)
+        set({ userToken: t, user: { id: p.sub, username: p.username || p.sub } })
+      } catch { set({ userToken: null, user: null }) }
+    } else if (AUTH_DISABLED) {
+      // Тестовый режим: считаем, что пользователь «гость»
+      set({ userToken: 'TEST', user: { id: 'test', username: 'guest' } })
+    }
   },
-  setAdminToken: (t)=>{
-    if(t) localStorage.setItem('adminToken', t); else localStorage.removeItem('adminToken')
-    const user = get().userToken
-    set({ adminToken: t||'', isAdmin: !!t && roleFrom(t)==='ADMIN', token: user||'' })
+
+  setUserToken(token) {
+    if (token) {
+      localStorage.setItem('userToken', token)
+      try {
+        const p = jwtDecode(token)
+        set({ userToken: token, user: { id: p.sub, username: p.username || p.sub } })
+      } catch {
+        set({ userToken: token, user: { id: 'unknown', username: 'user' } })
+      }
+    } else {
+      localStorage.removeItem('userToken')
+      set({ userToken: null, user: null })
+    }
   },
-  logoutAll: ()=>{
+
+  setAdminToken(token) {
+    if (token) localStorage.setItem('adminToken', token)
+    else localStorage.removeItem('adminToken')
+    set({ adminToken: token || null })
+  },
+
+  logout() {
     localStorage.removeItem('userToken')
-    localStorage.removeItem('adminToken')
-    set({ userToken:'', adminToken:'', token:'', isAdmin:false, isUser:false })
+    set({ userToken: null, user: null })
+    if (AUTH_DISABLED) {
+      // в тестовом режиме сразу возвращаем гостя
+      set({ userToken: 'TEST', user: { id: 'test', username: 'guest' } })
+    }
   }
 }))
+
+// автоинициализация
+useAuth.getState().init()
