@@ -1,45 +1,27 @@
 // netlify/functions/user-register.js
-import { supabase } from './_common.js'
+import { supabase, json, signToken } from './_common.js'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-
-const AUTH_DISABLED = String(process.env.AUTH_DISABLED || '').toLowerCase() === 'true'
 
 export async function handler(event) {
   try {
-    if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: JSON.stringify({ error: 'method_not_allowed' }) }
-    }
-
+    if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' })
     const { username, password } = JSON.parse(event.body || '{}')
-    const uname = String(username || '').trim()
+    if (!username || !password) return json(400, { error: 'username/password required' })
 
-    if (!uname) return { statusCode: 400, body: JSON.stringify({ error: 'username required' }) }
-
-    // ── ТЕСТОВЫЙ РЕЖИМ: игнорим пароль, создаём пользователя если нужно ─
-    if (AUTH_DISABLED) {
-      let { data: user } = await supabase.from('users').select('*').eq('username', uname).maybeSingle()
-      if (!user) {
-        const ins = await supabase.from('users').insert([{ username: uname, password: 'TEST' }]).select().single()
-        user = ins.data
-      }
-      const token = jwt.sign({ sub: user.id, username: user.username, role: 'USER' }, process.env.JWT_SECRET, { expiresIn: '30d' })
-      return { statusCode: 200, body: JSON.stringify({ token, user: { id: user.id, username: user.username } }) }
-    }
-    // ───────────────────────────────────────────────────────────────────
-
-    if (!password) return { statusCode: 400, body: JSON.stringify({ error: 'password required' }) }
-
-    const { data: exists } = await supabase.from('users').select('id').eq('username', uname).maybeSingle()
-    if (exists) return { statusCode: 409, body: JSON.stringify({ error: 'Username already exists' }) }
+    // проверяем уникальность
+    const { data: exists, error: e1 } = await supabase
+      .from('users').select('id').eq('username', username).maybeSingle()
+    if (e1) return json(500, { error: 'db_error', detail: e1.message })
+    if (exists) return json(409, { error: 'username_taken' })
 
     const hash = await bcrypt.hash(password, 10)
-    const { data: user, error } = await supabase.from('users').insert([{ username: uname, password: hash }]).select().single()
-    if (error) throw error
+    const { data: created, error: e2 } = await supabase
+      .from('users').insert({ username, password_hash: hash }).select('id,username').single()
+    if (e2) return json(500, { error: 'db_error', detail: e2.message })
 
-    const token = jwt.sign({ sub: user.id, username: user.username, role: 'USER' }, process.env.JWT_SECRET, { expiresIn: '7d' })
-    return { statusCode: 200, body: JSON.stringify({ token, user: { id: user.id, username: user.username } }) }
+    const token = signToken({ sub: created.id, role: 'USER', username: created.username })
+    return json(200, { token, user: { id: created.id, username: created.username } })
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'server_error', detail: e.message }) }
+    return json(500, { error: 'server_error', detail: e.message })
   }
 }
