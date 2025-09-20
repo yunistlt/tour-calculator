@@ -331,8 +331,8 @@ function HeaderBar({
   onNew, onSave, onOpen
 }){
   const bg = {
-    background:
-      'linear-gradient(135deg, rgba(0,180,219,0.9), rgba(0,131,176,0.9)), url("data:image/svg+xml,%3Csvg width='800' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0,120 C150,180 350,60 500,120 C650,180 750,120 800,150 L800,200 L0,200 Z' fill='%23ffffff22'/%3E%3C/svg%3E")',
+    background: `linear-gradient(135deg, rgba(0,180,219,0.9), rgba(0,131,176,0.9)),
+      url("data:image/svg+xml,%3Csvg width='800' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0,120 C150,180 350,60 500,120 C650,180 750,120 800,150 L800,200 L0,200 Z' fill='%23ffffff22'/%3E%3C/svg%3E")`,
     backgroundSize: 'cover',
     color:'#fff'
   }
@@ -365,7 +365,7 @@ function HeaderBar({
           <button onClick={onNew} style={btnWhite}>+ Новый</button>
           <button onClick={onSave} style={btnWhite}>💾 Сохранить</button>
           <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
-          <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
+          <a href="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</a>
         </div>
 
         <div style={{justifySelf:'end', fontSize:12, lineHeight:1.2, textAlign:'right', opacity:.95}}>
