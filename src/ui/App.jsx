@@ -268,7 +268,7 @@ export default function App(){
         onOpen={openScenarioList}
       />
 
-      <div className="layout"><!-- GRID-КОНТЕЙНЕР -->
+      <div className="layout">{/* GRID-КОНТЕЙНЕР */}
         <div className="col-left sideSticky">
           <LeftCatalog
             tourCatalog={tourCatalog}
