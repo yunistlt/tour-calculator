@@ -235,10 +235,10 @@ export default function App(){
   return (
     <div className="shell">
      {/* Шапка с итогами (адаптивная) */}
-<div className="topbar">
-  <div className="top-title">
+       <div className="topbar">
+          <div className="top-title">
     <h2>Калькулятор туров</h2>
-  </div>
+         </div>
   <div className="top-actions">
     <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
     <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
@@ -262,6 +262,7 @@ export default function App(){
     <Link to="/admin/login" className="small" style={{alignSelf:'center'}}>Админ →</Link>
   </div>
       </div>
+</div>
 
       {/* Контент: левый каталог | центр | правые параметры */}
       <div className="grid">
