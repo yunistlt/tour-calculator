@@ -234,18 +234,33 @@ export default function App(){
 
   return (
     <div className="shell">
-      {/* Шапка с итогами */}
-      <div className="topbar">
-        <h2>Калькулятор туров</h2>
-        <div className="row" style={{alignItems:'center'}}>
-          <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
-          <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
-          <span className="pill">На группу: <b>{groupTotal.toFixed(2)}</b></span>
-          <button className="secondary btn-sm" onClick={()=>{ setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' }); setTourItems([]); setDayItems({}); setFiles([]) }}>＋ Новый</button>
-          <button className="btn-sm" onClick={saveScenario} disabled={saving}>{saving?'Сохраняю…':'💾 Сохранить'}</button>
-          <button className="secondary btn-sm" onClick={openDialog}>📂 Открыть</button>
-          <Link to="/admin/login" className="small">Админ →</Link>
-        </div>
+     {/* Шапка с итогами (адаптивная) */}
+<div className="topbar">
+  <div className="top-title">
+    <h2>Калькулятор туров</h2>
+  </div>
+  <div className="top-actions">
+    <span className="pill">За тур (на чел): <b>{perPersonTour.toFixed(2)}</b></span>
+    <span className="pill">Всего на чел: <b>{perPersonTotal.toFixed(2)}</b></span>
+    <span className="pill">На группу: <b>{groupTotal.toFixed(2)}</b></span>
+
+    <button
+      className="secondary btn-sm"
+      onClick={()=>{
+        setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' })
+        setTourItems([]); setDayItems({}); setFiles([])
+      }}
+    >
+      ＋ Новый
+    </button>
+
+    <button className="btn-sm" onClick={saveScenario} disabled={saving}>
+      {saving ? 'Сохраняю…' : '💾 Сохранить'}
+    </button>
+
+    <button className="secondary btn-sm" onClick={openDialog}>📂 Открыть</button>
+    <Link to="/admin/login" className="small" style={{alignSelf:'center'}}>Админ →</Link>
+  </div>
       </div>
 
       {/* Контент: левый каталог | центр | правые параметры */}
