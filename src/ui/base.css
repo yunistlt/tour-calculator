@@ -8,6 +8,7 @@
   --line:#e6eef6;
   --radius:16px;
   --shadow:0 8px 24px rgba(11,43,59,.06), 0 2px 6px rgba(11,43,59,.05);
+  --topbarH: 64px; /* примерная высота шапки */
 }
 
 *{ box-sizing:border-box }
@@ -17,24 +18,11 @@ body{
   font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color:var(--ink);
   background:linear-gradient(180deg, #f0fbff 0%, #f6fffe 100%);
-  overflow:hidden; /* важно: скролл только у центральной колонки */
+  overflow:hidden; /* скролл только у центральной колонки */
 }
 
 a{ color:var(--brand); text-decoration:none }
 a:hover{ text-decoration:underline }
-
-.container{ max-width:100%; margin:0 auto }
-
-.topbar{
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
-  color:white;
-  border-radius: 0 0 calc(var(--radius) + 8px) calc(var(--radius) + 8px);
-  padding:16px 20px;
-  box-shadow: var(--shadow);
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-}
-.topbar h2{ margin:0; font-size:20px; letter-spacing:.2px }
-.topbar .row{ display:flex; gap:10px; align-items:center }
 
 button{
   border:0; padding:10px 14px; border-radius:10px; cursor:pointer;
@@ -42,8 +30,10 @@ button{
 }
 button.secondary{ background:#f4f8fb; color:var(--ink); border:1px solid var(--line) }
 button.btn-sm{ padding:7px 10px; font-size:14px }
+button:disabled{ opacity:.6; cursor:not-allowed }
 
 .small{ font-size:13px; color:var(--muted) }
+
 label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px }
 input, select, textarea{
   width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
@@ -67,35 +57,60 @@ textarea{ resize:vertical }
 .row > *{ flex:1 1 220px }
 
 .table{ width:100%; border-collapse: collapse }
-.table th, .table td{
-  padding:10px 12px; border-top:1px solid var(--line); vertical-align:top;
-}
+.table th, .table td{ padding:10px 12px; border-top:1px solid var(--line); vertical-align:top }
 .table thead th{ font-size:12px; color:var(--muted); font-weight:600; border-top:0 }
 .table tr:hover td{ background:#f9fdff }
 
-/* Трёхколоночная сетка: 25vw | авто | 20vw */
+/* Шапка */
+.topbar{
+  height: var(--topbarH);
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:0 20px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 100%);
+  color:white;
+  box-shadow:var(--shadow);
+}
+.topbar h2{ margin:0; font-size:20px; letter-spacing:.2px }
+.topbar .row{ display:flex; gap:10px; align-items:center }
+.pill{
+  display:inline-flex; align-items:center; gap:8px;
+  background:#ffffff22; color:#fff; padding:8px 12px; border-radius:999px; font-size:13px;
+}
+
+/* Каркас страницы: шапка + контент */
 .shell{
   display:grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: var(--topbarH) 1fr;
   height:100vh;
 }
+
+/* Трёхколоночная сетка: 25vw | авто | 20vw */
 .grid{
   display:grid;
   grid-template-columns: 25vw 1fr 20vw;
   gap:16px;
   padding:16px;
   height:100%;
+  min-height:0;       /* критично для скролла центра */
+  overflow:hidden;    /* скролл только у внутренних колонок */
 }
+
+/* Боковые колонки закреплены, своя прокрутка при переполнении */
 .sidebar-left, .sidebar-right{
   position:sticky;
   top:0;
-  height: calc(100vh - 0px); /* закрепляем, не скроллим с центром */
-  overflow:auto; /* если контента много, скролл внутри боковой панели */
+  align-self:start;
+  height: calc(100vh - var(--topbarH) - 16px);
+  overflow:auto;
   padding-bottom:16px;
+  min-height:0;
 }
+
+/* Центральная колонка скроллится */
 .center{
   height:100%;
-  overflow:auto; /* центральная колонка скроллится */
+  min-height:0;   /* критично для overflow */
+  overflow:auto;
   padding-bottom:24px;
 }
 
