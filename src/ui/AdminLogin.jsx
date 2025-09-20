@@ -16,17 +16,19 @@ export default function AdminLogin(){
     setE(''); setL(true)
     try{
       const r = await fetch('/api/admin-login', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({ username: username.trim(), password })
       })
       const data = await r.json()
-      if(!r.ok) throw new Error(data.error || 'auth_failed')
+      if (!r.ok) throw new Error(data.error || 'auth_failed')
       setAdminToken(data.token)
       nav('/admin')
     }catch(err){
       setE(err.message)
-    }finally{ setL(false) }
+    }finally{
+      setL(false)
+    }
   }
 
   return (
@@ -36,7 +38,7 @@ export default function AdminLogin(){
         <input placeholder="Логин" value={username} onChange={e=>setU(e.target.value)} />
         <input type="password" placeholder="Пароль" value={password} onChange={e=>setP(e.target.value)} />
         {error && <div style={{color:'red', fontSize:12}}>{error}</div>}
-        <button type="submit" disabled={loading}>{loading?'Вхожу…':'Войти'}</button>
+        <button type="submit" disabled={loading}>{loading ? 'Вхожу…' : 'Войти'}</button>
       </form>
     </div>
   )
