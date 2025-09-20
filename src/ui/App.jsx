@@ -4,8 +4,9 @@ import { useAuth } from './store'
 
 export default function App(){
   const nav = useNavigate()
-  const { userToken, isAdmin } = useAuth()   // <-- важно: именно userToken
+  const { userToken, isAdmin } = useAuth()
 
+  // состояние (без изменений логики)
   const [scenario,setScenario] = useState({ id:null, name:'Мой тур', days:1, participants:2, singles:0, description:'' })
   const [services,setServices] = useState([])
   const [tourItems,setTourItems] = useState([])
@@ -14,19 +15,13 @@ export default function App(){
   const [modalOpen,setModalOpen] = useState(false)
   const [list,setList] = useState([])
 
-  // запрет для админа + требуем user-вход
   useEffect(()=>{
     if (!userToken) { nav('/login') }
-    if (isAdmin) {
-      alert('Калькулятор доступен только под пользовательским аккаунтом. Войдите как пользователь.')
-      nav('/login')
-    }
-  }, [userToken, isAdmin])
+    if (isAdmin) { alert('Калькулятор доступен только пользователям'); nav('/login') }
+  }, [userToken, isAdmin, nav])
 
-  // загрузка справочника услуг
   useEffect(()=>{ fetch('/api/services').then(r=>r.json()).then(setServices) },[])
 
-  // ---- размещение / лимиты ----
   const DOUBLE_ROOMS = 10
   const N = Number(scenario.participants || 0)
   const S = Number(scenario.singles || 0)
@@ -34,12 +29,12 @@ export default function App(){
   const maxAllowed = DOUBLE_ROOMS * 2 - S_EFF
   const days = Array.from({length: Math.max(1, Number(scenario.days||1))}, (_,i)=>i+1)
 
+  // хендлеры параметров
   function handleParticipantsChange(e){
     const raw = Number(e.target.value || 0)
     if (raw > maxAllowed){
       alert(`Слишком много участников: максимум ${maxAllowed} при ${S_EFF} single.`)
-      setScenario(prev => ({...prev, participants: maxAllowed}))
-      return
+      setScenario(prev => ({...prev, participants: maxAllowed})); return
     }
     setScenario(prev => ({...prev, participants: Math.max(1, raw)}))
   }
@@ -59,9 +54,9 @@ export default function App(){
     setScenario(prev => ({...prev, days: Math.max(1, raw)}))
   }
 
-  // ---- выбор услуг ----
-  const tourServices = services.filter(s=>s.type==='PER_TOUR')
-  const dailyServices = services.filter(s=>s.type==='PER_PERSON' || s.type==='PER_GROUP')
+  // услуги
+  const tourCatalog  = services.filter(s=>s.type==='PER_TOUR')
+  const dailyCatalog = services.filter(s=>s.type==='PER_PERSON' || s.type==='PER_GROUP')
 
   function toggleTourItem(svc){
     const exists = tourItems.find(x=>x.id===svc.id)
@@ -70,6 +65,14 @@ export default function App(){
   }
   function setTourRepeats(id, val){
     setTourItems(tourItems.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x ))
+  }
+  function addDailyToDay(service, day){
+    const d = Number(day)
+    if(!d) return
+    const arr = dayItems[d] || []
+    if(arr.find(x=>x.id===service.id)) return // уже есть
+    const next = [...arr, { id:service.id, service_id:service.id, name_ru:service.name_ru, type:service.type, price:Number(service.price), repeats:1 }]
+    setDayItems({...dayItems, [d]: next})
   }
   function toggleItem(day, service){
     const arr = dayItems[day] || []
@@ -82,7 +85,7 @@ export default function App(){
     setDayItems({...dayItems, [day]: arr.map(x=> x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x )})
   }
 
-  // ---- расчёт ----
+  // расчёт
   const perPersonTour = tourItems.reduce((sum, it)=>{
     if(N>0) return sum + (Number(it.price) * (it.repeats||1))/N
     return sum
@@ -101,7 +104,7 @@ export default function App(){
   const perPersonTotal = perPersonTour + perPersonTotalDays
   const groupTotal = perPersonTotal * N
 
-  // ---- сборка items для сохранения ----
+  // сохранение/загрузка (как было)
   function buildItemsPayload(){
     const itemsTour = tourItems.map(it => ({
       day: null, service_id: it.service_id, type: it.type, price: Number(it.price), repeats: Number(it.repeats||1)
@@ -113,8 +116,6 @@ export default function App(){
     )
     return [...itemsTour, ...itemsDays]
   }
-
-  // ---- сохранение/загрузка ----
   async function saveScenario(){
     if(!userToken){ alert('Войдите как пользователь'); return }
     const payload = {
@@ -138,14 +139,12 @@ export default function App(){
       if(r.ok){ alert('Изменения сохранены') } else { alert('Ошибка: ' + (t.error || r.status)) }
     }
   }
-
   async function openDialog(){
     setModalOpen(true)
     const r = await fetch('/api/scenarios', { headers: { Authorization:'Bearer '+userToken } })
     const data = await r.json()
     if(r.ok) setList(data)
   }
-
   async function loadScenario(id){
     const r = await fetch('/api/scenarios?id='+id, { headers:{ Authorization:'Bearer '+userToken } })
     const data = await r.json()
@@ -168,7 +167,6 @@ export default function App(){
     setFiles(data.files||[])
     setModalOpen(false)
   }
-
   async function deleteScenario(id){
     if(!confirm('Удалить сценарий?')) return
     const r = await fetch('/api/scenarios?id='+id, { method:'DELETE', headers:{ Authorization:'Bearer '+userToken } })
@@ -183,14 +181,12 @@ export default function App(){
       const t = await r.json().catch(()=>({})); alert('Ошибка удаления: ' + (t.error || r.status))
     }
   }
-
   async function onFileSelected(e){
     const file = e.target.files?.[0]
     if(!file){ return }
     if(!scenario.id){
       alert('Сначала сохраните сценарий, затем прикрепляйте файлы.')
-      e.target.value = ''
-      return
+      e.target.value = ''; return
     }
     const buf = await file.arrayBuffer()
     const r = await fetch('/api/upload?scenario_id='+scenario.id, {
@@ -208,120 +204,151 @@ export default function App(){
     e.target.value = ''
   }
 
+  // UI
   return (
-    <div className="container">
-      <div className="header">
+    <div className="container shell">
+      {/* верх */}
+      <div className="topbar">
         <h2>Калькулятор туров</h2>
-        <div className="row" style={{gap:8, justifyContent:'flex-end'}}>
+        <div className="row">
           <button className="secondary btn-sm" onClick={()=>{ setScenario({ id:null, name:'Новый тур', days:1, participants:2, singles:0, description:'' }); setTourItems([]); setDayItems({}); setFiles([]) }}>＋ Новый</button>
           <button className="btn-sm" onClick={saveScenario}>💾 Сохранить</button>
           <button className="secondary btn-sm" onClick={openDialog}>📂 Открыть</button>
-          <Link to="/admin/login" className="small" style={{alignSelf:'center'}}>Админ →</Link>
+          <Link to="/admin/login" className="small">Админ →</Link>
         </div>
       </div>
 
-      {/* Параметры тура */}
-      <div className="card">
-        <div className="row">
-          <div><label>Название сценария</label><input value={scenario.name} onChange={e=>setScenario({...scenario, name:e.target.value})}/></div>
-        </div>
-        <div className="row">
-          <div><label>Дней</label><input type="number" min="1" value={scenario.days} onChange={handleDaysChange}/></div>
-          <div><label>Участников (макс {maxAllowed})</label><input type="number" min="1" max={maxAllowed} value={scenario.participants} onChange={handleParticipantsChange}/></div>
-          <div><label>Singles (0–10)</label><input type="number" min="0" max="10" value={scenario.singles} onChange={handleSinglesChange}/></div>
-        </div>
-        <div className="row">
-          <div><label>Описание</label><textarea rows="4" placeholder="Свободный текст: заметки, список участников, детали..." value={scenario.description} onChange={e=>setScenario({...scenario, description:e.target.value})}/></div>
-        </div>
-        <div className="row" style={{alignItems:'flex-end'}}>
-          <div style={{flex:'0 1 320px'}}><label>Прикрепить файл</label><input type="file" onChange={onFileSelected}/></div>
-          <div>
-            <label>Файлы</label>
-            <div className="small">{files.length ? 'Список прикреплённых файлов:' : 'Файлов нет'}</div>
-            {files.length>0 && (<ul>{files.map((f,i)=>(<li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.name || f.file_name || 'Файл '+(i+1)}</a></li>))}</ul>)}
-          </div>
-        </div>
-      </div>
-
-      {/* Услуги за тур */}
-      <div className="card">
-        <h3>Услуги на весь тур (делятся на всех)</h3>
-        <div className="row">
-          {services.filter(s=>s.type==='PER_TOUR').map(svc=>(
-            <button key={svc.id} onClick={()=>toggleTourItem(svc)}>
-              {svc.name_ru} — на группу (за тур) — {svc.price}
-            </button>
-          ))}
-        </div>
-        <table className="table">
-          <thead><tr><th>Услуга</th><th>Повторы</th><th>На чел (тур)</th></tr></thead>
-          <tbody>
-            {tourItems.map(it=>{
-              const perPerson = N>0 ? (Number(it.price)*(it.repeats||1))/N : 0
-              return (
-                <tr key={it.id}>
-                  <td data-label="Услуга">{it.name_ru || it.service_id}</td>
-                  <td data-label="Повторы"><input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} /></td>
-                  <td data-label="На чел (тур)">{perPerson.toFixed(2)}</td>
-                </tr>
-              )
-            })}
-            {tourItems.length===0 && <tr><td colSpan={3} className="small">Пока ничего не выбрано</td></tr>}
-          </tbody>
-        </table>
-        <div className="row"><div className="badge">Сумма «за тур» на человека: {perPersonTour.toFixed(2)}</div></div>
-      </div>
-
-      {/* Услуги по дням */}
-      <div className="card">
-        <h3>Выбор услуг по дням</h3>
-        {days.map(d=>(
-          <div key={d} style={{borderTop:'1px solid #e6eef6', paddingTop:12, marginTop:12}}>
-            <div className="row"><div><strong>День {d}</strong></div><div className="small">Выберите услуги на человека или на группу (за день).</div></div>
-            <div className="row">
-              {services.filter(s=>s.type!=='PER_TOUR').map(svc=>(
-                <button key={svc.id} onClick={()=>toggleItem(d,svc)}>
-                  {svc.name_ru} — {svc.type==='PER_PERSON'? 'на человека' : 'на группу/день'} — {svc.price}
+      {/* сетка: лево | центр | право */}
+      <div className="grid">
+        {/* ЛЕВАЯ НЕСКРОЛЛИРУЕМАЯ ПАНЕЛЬ (каталог услуг) */}
+        <aside className="sidebar-left">
+          <div className="card" style={{marginBottom:16}}>
+            <h3 style={{margin:'0 0 8px'}}>Услуги на весь тур</h3>
+            <div className="tags">
+              {tourCatalog.map(svc=>(
+                <button key={svc.id} className="service-chip" onClick={()=>toggleTourItem(svc)}>
+                  {svc.name_ru} · {svc.price}
                 </button>
               ))}
             </div>
-            <table className="table">
-              <thead><tr><th>Услуга</th><th>Тип</th><th>Повторы</th><th>На чел/день</th></tr></thead>
-              <tbody>
-                {(dayItems[d]||[]).map(it=>{
-                  const perPerson = it.type==='PER_PERSON' ? Number(it.price) : (N>0 ? (Number(it.price)*(it.repeats||1))/N : 0)
-                  return (
-                    <tr key={it.id}>
-                      <td data-label="Услуга">{it.name_ru || it.service_id}</td>
-                      <td data-label="Тип">{it.type==='PER_PERSON'?'на человека':'на группу/день'}</td>
-                      <td data-label="Повторы">
-                        {it.type==='PER_GROUP'
-                          ? <input type="number" min="1" value={it.repeats||1} onChange={e=>setRepeats(d,it.id,e.target.value)}/>
-                          : <span>-</span>}
-                      </td>
-                      <td data-label="На чел/день">{perPerson.toFixed(2)}</td>
-                    </tr>
-                  )
-                })}
-                {(dayItems[d]||[]).length===0 && (<tr><td colSpan={4} className="small">Нет услуг для этого дня</td></tr>)}
-              </tbody>
-            </table>
-            <div className="row"><div className="badge">Итого на человека за день: {breakdown.find(x=>x.day===d)?.costPerPersonDay.toFixed(2)}</div></div>
+            {tourItems.length>0 && (
+              <div style={{marginTop:12}}>
+                <table className="table">
+                  <thead><tr><th>Услуга</th><th>Повторы</th></tr></thead>
+                  <tbody>
+                    {tourItems.map(it=>(
+                      <tr key={it.id}>
+                        <td data-label="Услуга">{it.name_ru || it.service_id}</td>
+                        <td data-label="Повторы"><input type="number" min="1" value={it.repeats||1} onChange={e=>setTourRepeats(it.id, e.target.value)} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        ))}
+
+          <div className="card">
+            <h3 style={{margin:'0 0 8px'}}>Услуги по дням</h3>
+            {/* выбор дня + добавление */}
+            <div className="tags" style={{marginBottom:10}}>
+              {dailyCatalog.map(svc=>(
+                <div key={svc.id} className="service-chip" style={{gap:6}}>
+                  <span>{svc.name_ru} · {svc.type==='PER_PERSON'?'на чел':'на группу/день'} · {svc.price}</span>
+                  <select onChange={(e)=>{ const d = Number(e.target.value); if(d) { addDailyToDay(svc, d); e.target.value=''; } }} defaultValue="">
+                    <option value="" disabled>добавить в день…</option>
+                    {days.map(d=><option key={d} value={d}>День {d}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        {/* ЦЕНТРАЛЬНАЯ СКРОЛЛ-КОЛОНКА */}
+        <main className="center">
+          <div className="card">
+            <h3>Выбранные услуги по дням</h3>
+            {days.map(d=>(
+              <div key={d} style={{borderTop:'1px solid var(--line)', paddingTop:12, marginTop:12}}>
+                <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
+                  <div><strong>День {d}</strong></div>
+                </div>
+
+                <table className="table" style={{marginTop:8}}>
+                  <thead><tr><th>Услуга</th><th>Тип</th><th>Повторы</th><th>На чел/день</th><th></th></tr></thead>
+                  <tbody>
+                    {(dayItems[d]||[]).map(it=>{
+                      const perPerson = it.type==='PER_PERSON' ? Number(it.price) : (N>0 ? (Number(it.price)*(it.repeats||1))/N : 0)
+                      return (
+                        <tr key={it.id}>
+                          <td data-label="Услуга">{it.name_ru || it.service_id}</td>
+                          <td data-label="Тип">{it.type==='PER_PERSON'?'на человека':'на группу/день'}</td>
+                          <td data-label="Повторы">
+                            {it.type==='PER_GROUP'
+                              ? <input type="number" min="1" value={it.repeats||1} onChange={e=>setRepeats(d,it.id,e.target.value)}/>
+                              : <span className="small">—</span>}
+                          </td>
+                          <td data-label="На чел/день">{perPerson.toFixed(2)}</td>
+                          <td data-label="">
+                            <button className="secondary btn-sm" onClick={()=>toggleItem(d,{id:it.id})}>Убрать</button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {(dayItems[d]||[]).length===0 && (<tr><td colSpan={5} className="small">Нет услуг для этого дня</td></tr>)}
+                  </tbody>
+                </table>
+
+                <div className="row"><div className="small">Итого за день: {breakdown.find(x=>x.day===d)?.costPerPersonDay.toFixed(2)}</div></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <h3>Итоги</h3>
+            <div className="row">
+              <div className="small">На человека: <b>{perPersonTour.toFixed(2)} (за тур) + { (perPersonTotal - perPersonTour).toFixed(2) } (по дням) = {perPersonTotal.toFixed(2)}</b></div>
+              <div className="small">На группу: <b>{groupTotal.toFixed(2)}</b></div>
+            </div>
+          </div>
+        </main>
+
+        {/* ПРАВАЯ НЕСКРОЛЛИРУЕМАЯ ПАНЕЛЬ (параметры тура) */}
+        <aside className="sidebar-right">
+          <div className="card" style={{marginBottom:16}}>
+            <h3 style={{margin:'0 0 8px'}}>Параметры тура</h3>
+            <div className="row">
+              <div><label>Название</label><input value={scenario.name} onChange={e=>setScenario({...scenario, name:e.target.value})}/></div>
+            </div>
+            <div className="row">
+              <div><label>Дней</label><input type="number" min="1" value={scenario.days} onChange={handleDaysChange}/></div>
+              <div><label>Участников (макс {maxAllowed})</label><input type="number" min="1" max={maxAllowed} value={scenario.participants} onChange={handleParticipantsChange}/></div>
+              <div><label>Singles (0–10)</label><input type="number" min="0" max="10" value={scenario.singles} onChange={handleSinglesChange}/></div>
+            </div>
+            <div className="row">
+              <div><label>Описание</label><textarea rows="6" placeholder="Заметки, список участников..." value={scenario.description} onChange={e=>setScenario({...scenario, description:e.target.value})}/></div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 style={{margin:'0 0 8px'}}>Файлы</h3>
+            <div className="row" style={{alignItems:'flex-end'}}>
+              <div style={{flex:'0 1 100%'}}><label>Прикрепить файл</label><input type="file" onChange={onFileSelected}/></div>
+            </div>
+            {files.length>0 ? (
+              <ul style={{marginTop:10}}>
+                {files.map((f,i)=>(<li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.name || f.file_name || 'Файл '+(i+1)}</a></li>))}
+              </ul>
+            ) : <div className="small">Файлов нет</div>}
+          </div>
+        </aside>
       </div>
 
-      {/* Итоги */}
-      <div className="card">
-        <h3>Итоги</h3>
-        <div className="row"><div className="badge">На человека (итого): {perPersonTotal.toFixed(2)}</div><div className="badge">На группу (итого): {groupTotal.toFixed(2)}</div></div>
-        <div className="small">Включает: «за тур» ({perPersonTour.toFixed(2)} на чел) + суммы по дням.</div>
-      </div>
-
-      {/* Модалка «Открыть» */}
+      {/* модалка «Открыть» (без изменений) */}
       {modalOpen && (
         <div className="fixed" style={{position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}}>
-          <div className="card" style={{maxWidth:700, width:'100%'}}>
+          <div className="card" style={{maxWidth:700, width:'100%', background:'#fff'}}>
             <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
               <h3 style={{margin:0}}>Мои сценарии</h3>
               <button className="secondary btn-sm" onClick={()=>setModalOpen(false)}>Закрыть</button>
