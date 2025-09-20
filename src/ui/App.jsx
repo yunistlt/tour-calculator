@@ -8,23 +8,21 @@ const AUTH_DISABLED = String(import.meta.env.VITE_AUTH_DISABLED || '').toLowerCa
 export default function App(){
   const { userToken } = useAuth()
 
-  // параметры тура
+  // базовые параметры
   const [days, setDays] = useState(1)
   const [participants, setParticipants] = useState(2)
   const [singles, setSingles] = useState(0)
   const [description, setDescription] = useState('')
 
-  // справочник услуг
+  // справочник и выбранные позиции
   const [services, setServices] = useState([])
+  const [tourItems, setTourItems] = useState([])   // на весь тур
+  const [dayItems, setDayItems] = useState({})     // { [day]: [{id,name_ru,type,price,repeats}] }
 
-  // выбранные услуги: на весь тур и по дням
-  const [tourItems, setTourItems] = useState([])       // [{id, name_ru, price, repeats}]
-  const [dayItems, setDayItems] = useState({})         // { [day]: [{id, name_ru, type, price, repeats}] }
-
-  // наценка агента (публичная)
+  // наценка агента
   const [agentPct, setAgentPct] = useState(0)
 
-  // загрузка справочника и наценки
+  // загрузки
   useEffect(()=>{
     fetch('/api/services')
       .then(r=>r.json()).then(d=> setServices(Array.isArray(d)? d:[]))
@@ -35,7 +33,7 @@ export default function App(){
       .catch(()=> setAgentPct(0))
   }, [])
 
-  // константы размещения
+  // вместимость
   const DOUBLE_ROOMS = 10
   const S = Math.max(0, Math.min(Number(singles||0), DOUBLE_ROOMS))
   const maxAllowed = DOUBLE_ROOMS*2 - S
@@ -46,7 +44,7 @@ export default function App(){
   const tourCatalog  = useMemo(()=> services.filter(x=>x.type==='PER_TOUR'), [services])
   const dailyCatalog = useMemo(()=> services.filter(x=>x.type==='PER_PERSON' || x.type==='PER_GROUP'), [services])
 
-  // выбор услуг — на тур
+  // --- манипуляции с позициями ---
   function toggleTourItem(svc){
     const exists = tourItems.find(x=>x.id===svc.id)
     if(exists) setTourItems(tourItems.filter(x=>x.id!==svc.id))
@@ -56,7 +54,6 @@ export default function App(){
     setTourItems(tourItems.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1))}:x))
   }
 
-  // выбор услуг — по дням
   function addDailyToDay(svc, day){
     const d = Number(day); if(!d) return
     const arr = dayItems[d] || []
@@ -87,7 +84,7 @@ export default function App(){
     setDayItems({...dayItems, [day]: arr.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x)})
   }
 
-  // запреты по полям
+  // ограничения по синглам/участникам
   function onSinglesChange(v){
     const s = Math.max(0, Math.min(Number(v||0), DOUBLE_ROOMS))
     const nextMax = DOUBLE_ROOMS*2 - s
@@ -105,14 +102,12 @@ export default function App(){
     }
   }
 
-  // ───────── РАСЧЁТ ─────────
-  // PER_TOUR — делим на участников
+  // --- расчёт ---
   const perPersonTour = useMemo(()=>{
     if(N<=0) return 0
     return tourItems.reduce((sum,it)=> sum + (Number(it.price||0) * Math.max(1,Number(it.repeats||1))) / N, 0)
   }, [tourItems, N])
 
-  // По дням
   const dayBreakdown = useMemo(()=>{
     return daysArr.map(d=>{
       const items = dayItems[d]||[]
@@ -134,25 +129,19 @@ export default function App(){
     ()=> dayBreakdown.reduce((s,d)=> s + d.perPersonDay, 0),
     [dayBreakdown]
   )
-
-  // Итого на 1 человека (без агента)
   const perPersonTotal = useMemo(
     ()=> perPersonTour + perPersonDaysTotal,
     [perPersonTour, perPersonDaysTotal]
   )
-
-  // Итого по группе (без агента)
   const groupTotal = useMemo(()=> perPersonTotal * N, [perPersonTotal, N])
 
-  // Агентская и с агентом
   const agentReward = useMemo(()=> groupTotal * (agentPct/100), [groupTotal, agentPct])
   const perPersonWithAgent = useMemo(()=> perPersonTotal * (1 + agentPct/100), [perPersonTotal, agentPct])
   const groupTotalWithAgent = useMemo(()=> groupTotal * (1 + agentPct/100), [groupTotal, agentPct])
 
-  // ───────── UI ─────────
+  // ===== РЕНДЕР =====
   return (
     <div style={{display:'grid', gridTemplateRows:'auto 1fr', height:'100vh'}}>
-      {/* Шапка */}
       <div className="topbar" style={{
         display:'flex', alignItems:'center', gap:12, padding:'10px 16px',
         background:'#fff', borderBottom:'1px solid #e6eef6', position:'sticky', top:0, zIndex:10, flexWrap:'wrap'
@@ -168,44 +157,52 @@ export default function App(){
         <Link to="/admin/login" style={{marginLeft:'auto'}}>Админ →</Link>
       </div>
 
-      {/* Контент: левый фикс, центр скролл, правый фикс */}
-      <div style={{display:'grid', gridTemplateColumns:'1fr 2.5fr 0.9fr', height:'100%', gap:12, padding:12}}>
-        {/* ЛЕВО: каталог услуг (фикс) */}
-        <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto',
-          background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12}}>
-          <h4 style={{marginTop:0}}>Каталог услуг</h4>
+      <div style={{display:'grid', gridTemplateColumns:'1.2fr 2.4fr 1fr', height:'100%', gap:12, padding:12}}>
+        {/* ЛЕВАЯ ПАНЕЛЬ — АККУРАТНЫЕ КАРТОЧКИ */}
+        <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
+          <div style={card}>
+            <h4 style={{marginTop:0, marginBottom:8}}>Каталог услуг</h4>
 
-          <div style={{marginBottom:8, fontSize:12, opacity:.7}}>На весь тур</div>
-          <ul style={{listStyle:'none', paddingLeft:0, marginTop:0}}>
-            {tourCatalog.map(svc=>(
-              <li key={'t_'+svc.id} style={{display:'flex', justifyContent:'space-between', gap:8, marginBottom:6}}>
-                <span>{svc.name_ru}</span>
-                <div style={{display:'flex', gap:6}}>
-                  <button className="btn-sm" onClick={()=>toggleTourItem(svc)}>
-                    {tourItems.find(x=>x.id===svc.id)? '✓' : 'Добавить'}
-                  </button>
+            <div style={{fontSize:12, opacity:.7, marginTop:12, marginBottom:6}}>На весь тур</div>
+            <div style={{display:'grid', gap:8}}>
+              {tourCatalog.map(svc=>(
+                <div key={'t_'+svc.id} style={svcCard}>
+                  <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
+                    <div style={{fontWeight:600}}>{svc.name_ru}</div>
+                    <div style={priceBadge}>{Number(svc.price||0).toFixed(0)}</div>
+                  </div>
+                  <div style={{display:'flex', gap:8}}>
+                    <button className="btn-sm"
+                            onClick={()=>toggleTourItem(svc)}>
+                      {tourItems.find(x=>x.id===svc.id)? 'Убрать' : 'Добавить'}
+                    </button>
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
 
-          <div style={{marginTop:12, marginBottom:8, fontSize:12, opacity:.7}}>Ежедневные</div>
-          <ul style={{listStyle:'none', paddingLeft:0, marginTop:0}}>
-            {dailyCatalog.map(svc=>(
-              <li key={'d_'+svc.id} style={{display:'grid', gridTemplateColumns:'1fr auto auto', alignItems:'center', gap:6, marginBottom:6}}>
-                <span>{svc.name_ru}</span>
-                <button className="btn-sm" onClick={()=>addDailyToAllDays(svc)}>все дни</button>
-                <button className="btn-sm" onClick={()=>addDailyToDay(svc, 1)}>день 1</button>
-              </li>
-            ))}
-          </ul>
+            <div style={{fontSize:12, opacity:.7, marginTop:16, marginBottom:6}}>Ежедневные</div>
+            <div style={{display:'grid', gap:8}}>
+              {dailyCatalog.map(svc=>(
+                <ServicePickerCard
+                  key={'d_'+svc.id}
+                  svc={svc}
+                  daysArr={daysArr}
+                  onSelect={(opt)=>{
+                    if(opt==='ALL') addDailyToAllDays(svc)
+                    else addDailyToDay(svc, opt)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* ЦЕНТР: дни (скролл) */}
+        {/* ЦЕНТР — дни */}
         <div style={{overflow:'auto'}}>
           <div style={{display:'grid', gap:12}}>
             {daysArr.map(d=>(
-              <div key={d} style={{background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12}}>
+              <div key={d} style={card}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
                   <h4 style={{margin:0}}>День {d}</h4>
                   <span style={{fontSize:12, opacity:.7}}>
@@ -222,27 +219,17 @@ export default function App(){
                   {(dayItems[d]||[]).map(it=>(
                     <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
                       <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>({it.type==='PER_PERSON'?'на чел':'на группу'})</span></div>
-                      <input type="number" value={it.repeats}
-                        onChange={e=>setRepeats(d, it.id, e.target.value)} />
+                      <input type="number" value={it.repeats} onChange={e=>setRepeats(d, it.id, e.target.value)} />
                       <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
                       <button className="secondary btn-sm" onClick={()=>toggleItem(d, it)}>убрать</button>
                     </div>
                   ))}
                 </div>
-
-                <div style={{marginTop:8, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  {dailyCatalog.map(svc=>(
-                    <button key={'pick_'+d+'_'+svc.id} className="secondary btn-sm" onClick={()=>toggleItem(d, svc)}>
-                      { (dayItems[d]||[]).find(x=>x.id===svc.id)? '✓ '+svc.name_ru : svc.name_ru }
-                    </button>
-                  ))}
-                </div>
               </div>
             ))}
 
-            {/* блок услуг "на тур" с количествами */}
             {tourItems.length>0 && (
-              <div style={{background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12}}>
+              <div style={card}>
                 <h4 style={{marginTop:0}}>Услуги на весь тур</h4>
                 <div style={{display:'grid', gap:8}}>
                   {tourItems.map(it=>(
@@ -259,37 +246,96 @@ export default function App(){
           </div>
         </div>
 
-        {/* ПРАВО: параметры тура (фикс) */}
-        <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto',
-          background:'#fff', border:'1px solid #e6eef6', borderRadius:12, padding:12}}>
-          <h4 style={{marginTop:0}}>Параметры тура</h4>
+        {/* ПРАВАЯ ПАНЕЛЬ — параметры */}
+        <div style={{position:'sticky', top:0, alignSelf:'start', maxHeight:'calc(100vh - 60px)', overflow:'auto'}}>
+          <div style={card}>
+            <h4 style={{marginTop:0}}>Параметры тура</h4>
+            <div style={{display:'grid', gap:8}}>
+              <label>Дней
+                <input type="number" min="1" value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value||1)))} />
+              </label>
+              <label>Singles (одноместных)
+                <input type="number" min="0" max={DOUBLE_ROOMS} value={singles} onChange={e=>onSinglesChange(e.target.value)} />
+              </label>
+              <label>Участников (макс {maxAllowed})
+                <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
+              </label>
+              <label>Описание
+                <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} />
+              </label>
+            </div>
 
-          <div style={{display:'grid', gap:8}}>
-            <label>Дней
-              <input type="number" min="1" value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value||1)))} />
-            </label>
-            <label>Singles (одноместных)
-              <input type="number" min="0" max={DOUBLE_ROOMS} value={singles} onChange={e=>onSinglesChange(e.target.value)} />
-            </label>
-            <label>Участников (макс {maxAllowed})
-              <input type="number" min="1" value={N} onChange={e=>onParticipantsChange(e.target.value)} />
-            </label>
-            <label>Описание
-              <textarea rows={4} value={description} onChange={e=>setDescription(e.target.value)} />
-            </label>
-          </div>
+            <hr style={{margin:'12px 0'}} />
 
-          <hr style={{margin:'12px 0'}} />
-
-          <div style={{display:'grid', gap:6, fontSize:14}}>
-            <div>За тур (на чел, без агента): <b>{perPersonTotal.toFixed(2)}</b></div>
-            <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
-            <div>Итого по группе (без агента): <b>{groupTotal.toFixed(2)}</b></div>
-            <div>Итого по группе (с агентом): <b>{groupTotalWithAgent.toFixed(2)}</b></div>
-            <div>Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
+            <div style={{display:'grid', gap:6, fontSize:14}}>
+              <div>За тур (на чел, без агента): <b>{perPersonTotal.toFixed(2)}</b></div>
+              <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
+              <div>Итого по группе (без агента): <b>{groupTotal.toFixed(2)}</b></div>
+              <div>Итого по группе (с агентом): <b>{groupTotalWithAgent.toFixed(2)}</b></div>
+              <div>Вознаграждение агента: <b>{agentReward.toFixed(2)}</b> ({agentPct}%)</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+/** ===== МЕЛКИЕ КОМПОНЕНТЫ И СТИЛИ ===== */
+
+function ServicePickerCard({ svc, daysArr, onSelect }){
+  const [choice, setChoice] = useState('') // '', 'ALL' или число-дня
+
+  function apply(){
+    if(choice==='ALL') onSelect('ALL')
+    else if(choice) onSelect(Number(choice))
+  }
+
+  return (
+    <div style={svcCard}>
+      <div style={{display:'flex', justifyContent:'space-between', gap:8, marginBottom:6}}>
+        <div style={{fontWeight:600}}>{svc.name_ru}</div>
+        <div style={priceBadge}>{Number(svc.price||0).toFixed(0)}</div>
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:8}}>
+        <select value={choice} onChange={e=>setChoice(e.target.value)} style={{...input}}>
+          <option value="">— выбрать дни —</option>
+          <option value="ALL">Все дни</option>
+          {daysArr.map(d=> <option key={d} value={d}>День {d}</option>)}
+        </select>
+        <button className="btn-sm" onClick={apply} disabled={!choice}>Добавить</button>
+      </div>
+      <div style={{fontSize:12, opacity:.6, marginTop:4}}>
+        {svc.type==='PER_PERSON' ? 'за человека (в день)' : 'за группу (в день)'}
+      </div>
+    </div>
+  )
+}
+
+/* ——— простые стили ——— */
+const card = {
+  background:'#fff',
+  border:'1px solid #e6eef6',
+  borderRadius:12,
+  padding:12
+}
+const svcCard = {
+  background:'#f8fbff',
+  border:'1px solid #e6eef6',
+  borderRadius:10,
+  padding:10
+}
+const priceBadge = {
+  padding:'2px 8px',
+  borderRadius:999,
+  background:'#e8f4ff',
+  border:'1px solid #cfe7ff',
+  fontSize:12
+}
+const input = {
+  width:'100%',
+  padding:'8px 10px',
+  border:'1px solid #d7e1eb',
+  borderRadius:8,
+  outline:'none'
 }
