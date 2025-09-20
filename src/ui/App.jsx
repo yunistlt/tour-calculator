@@ -576,7 +576,14 @@ const modalCard = {
   padding:14, boxShadow:'0 10px 30px rgba(0,0,0,.15)'
 }
 const openRow = {
-  display:'grid', gridTemplateColumns:'1fr auto', gap:8,
-  padding:'10px 12px', border:'1px solid #e6eef6', borderRadius:10,
-  background:'#fafcff', cursor:'pointer', textAlign:'left'
+  display:'grid', 
+  gridTemplateColumns:'1fr auto', 
+  gap:8,
+  padding:'10px 12px', 
+  border:'1px solid #e6eef6', 
+  borderRadius:10,
+  background:'#fafcff', 
+  cursor:'pointer', 
+  textAlign:'left',
+  color:'#222'   // ← ДОБАВЬ ЭТО
 }
