@@ -1,65 +1,43 @@
+// src/ui/AdminLogin.jsx
 import React, { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from './store'
 
 export default function AdminLogin(){
   const nav = useNavigate()
-  const { setAdminToken, logoutAll } = useAuth()
-  const [login, setLogin] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const { setAdminToken } = useAuth()
+  const [username, setU] = useState('')
+  const [password, setP] = useState('')
+  const [loading, setL] = useState(false)
+  const [error, setE] = useState('')
 
   async function onSubmit(e){
     e.preventDefault()
-    setError('')
-    const username = (login || '').trim()
-    const pwd = (password || '').trim()
-    if(!username || !pwd){ setError('Введите логин и пароль'); return }
-    setLoading(true)
+    setE(''); setL(true)
     try{
       const r = await fetch('/api/admin-login', {
         method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ username, password: pwd }) // <-- ВАЖНО: username
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ username: username.trim(), password })
       })
-      const data = await r.json().catch(()=>({}))
-      if(!r.ok || !data?.token){
-        throw new Error(data?.error || 'Неверный логин или пароль')
-      }
-      logoutAll()
+      const data = await r.json()
+      if(!r.ok) throw new Error(data.error || 'auth_failed')
       setAdminToken(data.token)
       nav('/admin')
     }catch(err){
-      setError(err.message)
-    }finally{
-      setLoading(false)
-    }
+      setE(err.message)
+    }finally{ setL(false) }
   }
 
   return (
-    <div className="container">
-      <div className="header">
-        <h2>Вход в админку</h2>
-        <Link to="/login" className="small">← Пользователь</Link>
-      </div>
-
-      <div className="card" style={{maxWidth: 520}}>
-        <form onSubmit={onSubmit}>
-          <div>
-            <label>Логин</label>
-            <input value={login} onChange={e=>setLogin(e.target.value)} autoFocus />
-          </div>
-          <div>
-            <label>Пароль</label>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} />
-          </div>
-          {error && <div className="alert">{error}</div>}
-          <button type="submit" disabled={loading}>
-            {loading ? 'Входим…' : 'Войти'}
-          </button>
-        </form>
-      </div>
+    <div className="auth-page" style={{minHeight:'100vh', display:'grid', placeItems:'center'}}>
+      <form onSubmit={onSubmit} style={{display:'grid', gap:12, padding:20, border:'1px solid #e6eef6', borderRadius:12, background:'#fff'}}>
+        <h3 style={{margin:0}}>Админ вход</h3>
+        <input placeholder="Логин" value={username} onChange={e=>setU(e.target.value)} />
+        <input type="password" placeholder="Пароль" value={password} onChange={e=>setP(e.target.value)} />
+        {error && <div style={{color:'red', fontSize:12}}>{error}</div>}
+        <button type="submit" disabled={loading}>{loading?'Вхожу…':'Войти'}</button>
+      </form>
     </div>
   )
 }
