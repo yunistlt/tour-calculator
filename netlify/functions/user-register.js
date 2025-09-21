@@ -6,6 +6,7 @@ export async function handler(event) {
   try {
     if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' })
     const { username, password } = JSON.parse(event.body || '{}')
+    const uname = String(username || '').trim()
     if (!username || !password) return json(400, { error: 'username/password required' })
 
     // проверяем уникальность
