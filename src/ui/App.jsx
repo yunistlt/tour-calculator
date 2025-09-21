@@ -316,7 +316,7 @@ export default function App(){
 /** ===== КОМПОНЕНТЫ ===== */
 
 function HeaderBar({
-  projectName, setProjectName,
+  projectName, setProjectName, user,
   perPersonWithAgent, groupTotalWithAgent, agentReward, agentPct,
   onNew, onSave, onOpen
 })
