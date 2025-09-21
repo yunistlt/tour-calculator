@@ -16,7 +16,7 @@ export async function handler(event) {
 
     const hash = await bcrypt.hash(password, 10)
     const { data: created, error: e2 } = await supabase
-      .from('users').insert({ username, password_hash: hash }).select('id,username').single()
+      .from('users').insert({ username, password: hash }).select('id,username').single()
     if (e2) return json(500, { error: 'db_error', detail: e2.message })
 
     const token = signToken({ sub: created.id, role: 'USER', username: created.username })
