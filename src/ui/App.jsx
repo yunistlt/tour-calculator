@@ -333,6 +333,25 @@ function HeaderBar({
         gap:12, alignItems:'center',
         padding:'12px 16px',
       }}>
+        {/* Бейдж с именем пользователя (правый край шапки) */}
+<div style={{
+  marginLeft: 'auto',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8
+}}>
+  <span style={{ fontSize: 12, opacity: .7 }}>Пользователь:</span>
+  <strong style={{
+    background: '#eef6ff',
+    border: '1px solid #dbeafe',
+    borderRadius: 8,
+    padding: '6px 10px',
+    lineHeight: 1
+  }}>
+    {user?.username || 'гость'}
+  </strong>
+</div>
+
         <div style={{display:'flex', alignItems:'center', gap:12, minWidth:0}}>
           <div style={{fontSize:18, fontWeight:800, whiteSpace:'nowrap'}}>
             🌴 Калькулятор эвентов и туров
