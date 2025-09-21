@@ -421,7 +421,7 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
               <h4 style={{margin:0}}>День {d}</h4>
               <span style={{fontSize:12, opacity:.7}}>
                 На чел/день: <b>{(dayItems[d]||[]).reduce((acc,it)=>{
-                  const price = Number(it.price||0); const reps = Math.max(1, Number(it.repeats||1))
+                  const price = Number(it.price||0); const reps = Number(it.repeats||0)
                   if(it.type==='PER_PERSON') return acc + price*reps
                   if(it.type==='PER_GROUP')   return acc + (N>0 ? (price*reps)/N : 0)
                   return acc
@@ -433,7 +433,7 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
               {(dayItems[d]||[]).map(it=>(
                 <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
                   <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>({it.type==='PER_PERSON'?'на чел':'на группу'})</span></div>
-                  <input type="number" value={it.repeats} onChange={e=>setRepeats(d, it.id, e.target.value)} />
+                  <input type="number" value={it.repeats ?? ''} onChange={e=>setRepeats(d, it.id, e.target.value)} />
                   <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
                   <button className="secondary btn-sm" onClick={()=>toggleItem(d, it)}>убрать</button>
                 </div>
@@ -449,7 +449,7 @@ function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setT
               {tourItems.map(it=>(
                 <div key={it.id} style={{display:'grid', gridTemplateColumns:'1fr 140px 90px auto', gap:8}}>
                   <div>{it.name_ru} <span style={{opacity:.6, fontSize:12}}>(на тур)</span></div>
-                  <input type="number" value={it.repeats} onChange={e=>setTourRepeats(it.id, e.target.value)}/>
+                  <input type="number" value={it.repeats ?? ''} onChange={e=>setTourRepeats(it.id, e.target.value)}/>
                   <div style={{opacity:.7, alignSelf:'center'}}>{Number(it.price||0).toFixed(2)}</div>
                   <button className="secondary btn-sm" onClick={()=>toggleTourItem({id:it.id})}>убрать</button>
                 </div>
