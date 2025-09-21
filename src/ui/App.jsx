@@ -62,7 +62,7 @@ export default function App(){
     else setTourItems([...tourItems, { id:svc.id, name_ru:svc.name_ru, price:Number(svc.price||0), repeats:1 }])
   }
   function setTourRepeats(id, val){
-    setTourItems(tourItems.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1))}:x))
+    setTourItems(tourItems.map(x=>x.id===id? {...x, repeats: val }:x))
   }
 
   function addDailyToDay(svc, day){
@@ -92,7 +92,7 @@ export default function App(){
   }
   function setRepeats(day, id, val){
     const arr = dayItems[day] || []
-    setDayItems({...dayItems, [day]: arr.map(x=>x.id===id? {...x, repeats: Math.max(1, Number(val||1)) } : x)})
+    setDayItems({...dayItems, [day]: arr.map(x=>x.id===id? {...x, repeats: val } : x)})
   }
 
   // ограничения по синглам/участникам
