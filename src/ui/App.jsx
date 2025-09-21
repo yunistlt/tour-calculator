@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from './store'
 
+
 const AUTH_DISABLED = String(import.meta.env.VITE_AUTH_DISABLED || '').toLowerCase() === 'true'
 const MAX_FILE_MB = 100
 
@@ -358,6 +359,20 @@ function HeaderBar({
           <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
           <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
         </div>
+        
+        {/* Кнопки + бейдж пользователя (справа) */}
+       <div style={{justifySelf:'end', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
+          <div style={{
+              display:'flex', alignItems:'center', gap:8,
+              padding:'6px 10px', background:'#eef6ff', border:'1px solid #dbeafe', borderRadius:8, color:'#0b2b3b'}}>
+    <span style={{ fontSize: 12, opacity: .7 }}>Пользователь:</span>
+    <strong>{user?.username || 'гость'}</strong>
+         </div>
+  <button onClick={onNew} style={btnWhite}>+ Новый</button>
+  <button onClick={onSave} style={btnWhite}>💾 Сохранить</button>
+  <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
+  <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
+</div>
 
         <div style={{justifySelf:'end', fontSize:12, lineHeight:1.2, textAlign:'right', opacity:.95}}>
           <div>За тур (на чел, с агентом): <b>{perPersonWithAgent.toFixed(2)}</b></div>
