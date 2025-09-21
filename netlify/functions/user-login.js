@@ -9,10 +9,10 @@ export async function handler(event) {
     if (!username || !password) return json(400, { error: 'username/password required' })
 
     const { data: user, error: e1 } = await supabase
-      .from('users').select('id,username,password_hash').eq('username', username).single()
+      .from('users').select('id,username,password').eq('username', username).single()
     if (e1 || !user) return json(401, { error: 'invalid_credentials' })
 
-    const ok = await bcrypt.compare(password, user.password_hash || '')
+    const ok = await bcrypt.compare(password, user.password || '')
     if (!ok) return json(401, { error: 'invalid_credentials' })
 
     const token = signToken({ sub: user.id, role: 'USER', username: user.username })
