@@ -352,13 +352,6 @@ function HeaderBar({
             placeholder="Название проекта"
           />
         </div>
-
-        <div style={{justifySelf:'end', display:'flex', gap:8, flexWrap:'wrap'}}>
-          <button onClick={onNew} style={btnWhite}>+ Новый</button>
-          <button onClick={onSave} style={btnWhite}>💾 Сохранить</button>
-          <button onClick={onOpen} style={btnWhite}>📂 Открыть</button>
-          <Link to="/admin/login" style={{...btnWhite, textDecoration:'none'}}>Админ →</Link>
-        </div>
         
         {/* Кнопки + бейдж пользователя (справа) */}
        <div style={{justifySelf:'end', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
