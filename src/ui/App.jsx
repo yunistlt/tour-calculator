@@ -411,7 +411,9 @@ function LeftCatalog({ tourCatalog, dailyCatalog, daysArr, toggleTourItem, addDa
 
 function CenterDays({ daysArr, dayItems, setRepeats, toggleItem, tourItems, setTourRepeats, toggleTourItem, N }){
   return (
-    <div style={{overflow:'auto'}}>
+    <div style={{overflow: 'auto',
+  maxHeight: 'calc(100vh - 120px)', // отнимаем шапку и отступы
+  paddingRight: 8}}>
       <div style={{display:'grid', gap:12}}>
         {daysArr.map(d=>(
           <div key={d} style={card}>
